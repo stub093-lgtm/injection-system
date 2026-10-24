@@ -66,9 +66,6 @@
                             雲端連線中...
                         </span>
                         <span class="text-xs text-slate-400 hidden sm:inline">｜ 專案：sunghsing</span>
-                        <a id="cloud-api-enable-btn" href="https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=sunghsing" target="_blank" class="hidden text-[11px] bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-2 py-0.5 rounded transition">
-                            <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>點此啟用雲端 API
-                        </a>
                     </div>
                 </div>
             </div>
@@ -110,6 +107,19 @@
             </div>
         </div>
     </header>
+
+    <!-- 雲端 API 尚未啟用提示橫幅 (預設隱藏，僅當偵測到 API 未啟用時顯示) -->
+    <div id="api-warning-banner" class="hidden bg-amber-50 border-b border-amber-200 px-4 py-2.5 text-xs text-amber-900 no-print">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-triangle-exclamation text-amber-600 text-sm"></i>
+                <span><strong>提示：</strong>目前處於「本機自動保存模式」（您輸入的資料皆安全保存在此設備中）。若要開啟跨裝置雲端同步，請確認已於 Firebase 控制台啟用 Firestore 資料庫與讀寫規則。</span>
+            </div>
+            <a href="https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=sunghsing" target="_blank" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded-lg font-semibold transition shrink-0">
+                前往啟用雲端 API <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i>
+            </a>
+        </div>
+    </div>
 
     <!-- 主要內容區 -->
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -689,7 +699,7 @@
     <!-- 載入 Firebase 9 模組 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
         // 嵌入您的專屬 Firebase 設定
         const firebaseConfig = {
@@ -758,34 +768,34 @@
             logs: []
         };
 
-        window.appData = defaultData;
+        window.appData = JSON.parse(JSON.stringify(defaultData));
 
-        // 初始化 Firebase
+        // 1. 第一時間先載入本機已儲存的資料，確保畫面立刻有使用者先前輸入的資料
+        loadLocalData();
+
+        // 2. 初始化 Firebase 雲端連線
         try {
+            setLogLevel('silent'); // 避免未開通 API 時在 Console 不斷洗紅字錯誤
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
-            // 先載入本地快取，確保介面立即可用不卡頓
-            loadLocalData();
             initCloudSync();
         } catch (e) {
-            console.error("Firebase 初始化失敗，啟用本地保存模式", e);
-            updateStatusBadge(false, "初始化失敗");
-            loadLocalData();
+            updateStatusBadge(false);
         }
 
-        function updateStatusBadge(connected, note = '') {
+        function updateStatusBadge(connected, showBanner = false) {
             const el = document.getElementById('sync-status-indicator');
-            const apiBtn = document.getElementById('cloud-api-enable-btn');
+            const banner = document.getElementById('api-warning-banner');
+            if (!el) return;
+
             if (connected) {
                 el.className = "inline-flex items-center text-xs font-semibold text-emerald-400";
                 el.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>雲端已連線 (即時同步)';
-                if (apiBtn) apiBtn.classList.add('hidden');
+                if (banner) banner.classList.add('hidden');
             } else {
                 el.className = "inline-flex items-center text-xs font-semibold text-amber-400";
-                el.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 mr-1.5"></span>本機離線保存模式${note ? ' (' + note + ')' : ''}`;
-                if (note && note.includes('API') && apiBtn) {
-                    apiBtn.classList.remove('hidden');
-                }
+                el.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 mr-1.5"></span>本機自動保存模式';
+                if (banner && showBanner) banner.classList.remove('hidden');
             }
         }
 
@@ -794,32 +804,36 @@
             if (!db) return;
             const docRef = doc(db, "factory_system", "main_data");
 
-            onSnapshot(docRef, (docSnap) => {
+            onSnapshot(docRef, async (docSnap) => {
                 if (docSnap.exists()) {
                     const cloudData = docSnap.data();
-                    if (cloudData && cloudData.products) {
-                        window.appData = cloudData;
+                    if (cloudData && Array.isArray(cloudData.products)) {
+                        window.appData = {
+                            products: cloudData.products || [],
+                            sops: cloudData.sops || {},
+                            logs: cloudData.logs || []
+                        };
                         persistLocal();
-                        refreshAllViews();
+                        if (typeof window.refreshAllViews === 'function') {
+                            window.refreshAllViews();
+                        }
                         isCloudConnected = true;
                         updateStatusBadge(true);
                     }
                 } else {
-                    // 如果雲端尚無資料，將預設資料初始化上傳
-                    window.saveData();
+                    // 若雲端尚無資料，將目前本機已有的資料（或預設資料）首次同步上雲端
+                    await window.saveData();
                     isCloudConnected = true;
                     updateStatusBadge(true);
                 }
             }, (err) => {
-                console.warn("Firestore 連線或權限警告：", err);
+                // 若雲端尚未開通或權限未設，平滑降級為本機保存模式，不中斷系統運作
                 isCloudConnected = false;
-                const isApiDisabled = err && (err.code === 'permission-denied' || String(err).includes('Cloud Firestore API'));
-                updateStatusBadge(false, isApiDisabled ? '請啟用 Firestore API' : '離線');
-                loadLocalData();
+                updateStatusBadge(false, true);
             });
         }
 
-        // 儲存資料（先存本機快取，再同步至雲端）
+        // 儲存資料（先存本機快取確保百分之百不遺失，再同步至雲端）
         window.saveData = async function() {
             persistLocal();
             if (db) {
@@ -828,10 +842,8 @@
                     isCloudConnected = true;
                     updateStatusBadge(true);
                 } catch (e) {
-                    console.warn("寫入雲端失敗，已保存在本機：", e);
                     isCloudConnected = false;
-                    const isApiDisabled = e && (e.code === 'permission-denied' || String(e).includes('Cloud Firestore API'));
-                    updateStatusBadge(false, isApiDisabled ? '請啟用 Firestore API' : '離線已存');
+                    updateStatusBadge(false, true);
                 }
             }
         };
@@ -849,20 +861,31 @@
                 const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
                 if (stored) {
                     const parsed = JSON.parse(stored);
-                    if (parsed && parsed.products && parsed.products.length > 0) {
-                        window.appData = parsed;
+                    if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0) {
+                        window.appData = {
+                            products: parsed.products,
+                            sops: parsed.sops || {},
+                            logs: parsed.logs || []
+                        };
                     }
                 }
             } catch (e) {
                 console.warn("讀取本機資料異常", e);
             }
-            refreshAllViews();
+            if (typeof window.refreshAllViews === 'function') {
+                window.refreshAllViews();
+            }
         }
 
-        window.onload = function() {
-            document.getElementById('log-date').value = new Date().toISOString().slice(0, 10);
-            refreshAllViews();
-        };
+        window.addEventListener('DOMContentLoaded', () => {
+            const dateInput = document.getElementById('log-date');
+            if (dateInput && !dateInput.value) {
+                dateInput.value = new Date().toISOString().slice(0, 10);
+            }
+            if (typeof window.refreshAllViews === 'function') {
+                window.refreshAllViews();
+            }
+        });
     </script>
 
     <!-- 介面操作與計算邏輯 -->
