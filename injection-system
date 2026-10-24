@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>射出成型產品與生產管理系統 (雲端即時同步版)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & Noto Sans TC -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: #f1f5f9;
+        }
+        
+        /* 列印專用樣式：隱藏非必要導覽列，只顯示條件卡 */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printable-sop-card, #printable-sop-card * {
+                visibility: visible;
+            }
+            #printable-sop-card {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                box-shadow: none !important;
+                border: 2px solid #000 !important;
+                padding: 16px !important;
+                background: white !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+
+        /* 隱藏滾動條但保留滾動功能 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-30 no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap justify-between items-center gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600 p-2.5 rounded-xl shadow-inner flex items-center justify-center">
+                    <i class="fa-solid fa-industry text-xl text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold tracking-wide">射出成型生產與條件管理系統</h1>
+                    <p class="text-xs text-slate-400 hidden sm:block">產品規格 ‧ 三段射出工藝 SOP ‧ 生產良率 ‧ 排程試算 <span class="text-emerald-400 font-semibold">(🔥 雲端即時同步中)</span></p>
+                </div>
+            </div>
+
+            <!-- 共用與備份工具按鈕 -->
+            <div class="flex items-center space-x-2">
+                <button onclick="exportData()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center space-x-1.5 shadow-sm">
+                    <i class="fa-solid fa-download text-blue-400"></i>
+                    <span>備份下載</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 模組分頁切換列 -->
+        <div class="bg-slate-800 border-t border-slate-700/80">
+            <div class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 flex overflow-x-auto no-scrollbar">
+                <button onclick="switchTab('tab-products')" id="btn-tab-products" class="tab-btn flex-1 sm:flex-none flex items-center justify-center space-x-2 px-4 py-3 text-sm font-medium border-b-2 border-blue-500 text-blue-400 bg-slate-900/50 whitespace-nowrap transition">
+                    <i class="fa-solid fa-boxes-stacked"></i>
+                    <span>1. 產品與模具資料</span>
+                </button>
+                <button onclick="switchTab('tab-sop')" id="btn-tab-sop" class="tab-btn flex-1 sm:flex-none flex items-center justify-center space-x-2 px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-300 hover:text-white hover:bg-slate-700/40 whitespace-nowrap transition">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>2. 三段射出條件表 (SOP)</span>
+                </button>
+                <button onclick="switchTab('tab-logs')" id="btn-tab-logs" class="tab-btn flex-1 sm:flex-none flex items-center justify-center space-x-2 px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-300 hover:text-white hover:bg-slate-700/40 whitespace-nowrap transition">
+                    <i class="fa-solid fa-clipboard-check"></i>
+                    <span>3. 日常生產紀錄</span>
+                </button>
+                <button onclick="switchTab('tab-calc')" id="btn-tab-calc" class="tab-btn flex-1 sm:flex-none flex items-center justify-center space-x-2 px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-300 hover:text-white hover:bg-slate-700/40 whitespace-nowrap transition">
+                    <i class="fa-solid fa-calculator"></i>
+                    <span>4. 排程與用料試算</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要內容區 -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- ==================== 模組一：產品與模具基本資料 ==================== -->
+        <section id="tab-products" class="tab-content space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-cube text-blue-600"></i>
+                        產品與模具靜態資料庫
+                    </h2>
+                    <p class="text-sm text-slate-500 mt-0.5">管理所有塑膠射出件的基本規格、穴數、重量與標準成型迴圈時間（Cycle Time）。</p>
+                </div>
+                <button onclick="openProductModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center justify-center space-x-2 shrink-0">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>新增產品資料</span>
+                </button>
+            </div>
+
+            <!-- 產品表格清單 -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs uppercase tracking-wider">
+                                <th class="py-3.5 px-4 font-semibold">產品料號 / 品名</th>
+                                <th class="py-3.5 px-4 font-semibold">塑料材質</th>
+                                <th class="py-3.5 px-4 font-semibold text-center">模穴數 (Cav)</th>
+                                <th class="py-3.5 px-4 font-semibold text-right">單件成品重 (g)</th>
+                                <th class="py-3.5 px-4 font-semibold text-right">料頭重量 (g)</th>
+                                <th class="py-3.5 px-4 font-semibold text-right">總射出重/模 (g)</th>
+                                <th class="py-3.5 px-4 font-semibold text-center">標準迴圈 (秒)</th>
+                                <th class="py-3.5 px-4 font-semibold text-right">標準時產量 (pcs/hr)</th>
+                                <th class="py-3.5 px-4 font-semibold text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="product-table-body" class="divide-y divide-slate-200 text-sm">
+                            <!-- 由 JS 動態生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== 模組二：射出成型條件表 (SOP) ==================== -->
+        <section id="tab-sop" class="tab-content hidden space-y-6">
+            <!-- 產品選擇與工具列 -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
+                <div class="flex-1 max-w-xl">
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">選擇要查閱或設定成型條件的產品：</label>
+                    <select id="sop-product-select" onchange="loadSopForSelectedProduct()" class="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                        <!-- 由 JS 動態填入 -->
+                    </select>
+                </div>
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <button onclick="saveSopData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center space-x-2">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                        <span>儲存條件參數</span>
+                    </button>
+                    <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center space-x-2">
+                        <i class="fa-solid fa-print"></i>
+                        <span>列印條件卡</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 可列印的標準成型條件卡區域 -->
+            <div id="printable-sop-card" class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 space-y-6">
+                <!-- 條件卡標頭 -->
+                <div class="border-b-2 border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span class="bg-slate-900 text-white text-xs font-bold px-2.5 py-1 rounded">SOP 標準成型條件卡</span>
+                            <span id="sop-card-partno" class="text-sm font-mono font-bold text-blue-700"></span>
+                        </div>
+                        <h3 id="sop-card-partname" class="text-xl font-bold text-slate-900 mt-1">請選擇產品</h3>
+                    </div>
+                    <div class="text-xs sm:text-right text-slate-600 space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div><span class="font-semibold">使用塑料：</span><span id="sop-card-material">--</span></div>
+                        <div><span class="font-semibold">模穴數：</span><span id="sop-card-cavities">--</span> 穴 ｜ <span class="font-semibold">標準週期：</span><span id="sop-card-cycletime">--</span> 秒</div>
+                        <div><span class="font-semibold">單件重 / 料頭重：</span><span id="sop-card-weights">--</span></div>
+                    </div>
+                </div>
+
+                <!-- 1. 溫度設定區 (料管、模溫、烘料) -->
+                <div>
+                    <h4 class="text-sm font-bold text-slate-800 bg-slate-100 px-3 py-2 rounded-lg border-l-4 border-amber-500 flex items-center gap-2 mb-3">
+                        <i class="fa-solid fa-temperature-high text-amber-600"></i>
+                        一、溫度與乾燥設定 (Temperature & Drying)
+                    </h4>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <label class="block text-xs text-slate-500 mb-1">射嘴 (Nozzle) °C</label>
+                            <input type="number" id="sop-temp-nozzle" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <label class="block text-xs text-slate-500 mb-1">一段 (Zone 1) °C</label>
+                            <input type="number" id="sop-temp-z1" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <label class="block text-xs text-slate-500 mb-1">二段 (Zone 2) °C</label>
+                            <input type="number" id="sop-temp-z2" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <label class="block text-xs text-slate-500 mb-1">三段 (Zone 3) °C</label>
+                            <input type="number" id="sop-temp-z3" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <label class="block text-xs text-slate-500 mb-1">四段 (Zone 4) °C</label>
+                            <input type="number" id="sop-temp-z4" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div class="bg-amber-50/60 p-3 rounded-xl border border-amber-200">
+                            <label class="block text-xs text-amber-800 mb-1">公模/母模溫 °C</label>
+                            <input type="text" id="sop-temp-mold" placeholder="如: 50 / 50" class="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none">
+                        </div>
+                        <div class="bg-amber-50/60 p-3 rounded-xl border border-amber-200">
+                            <label class="block text-xs text-amber-800 mb-1">烘料溫度 °C</label>
+                            <input type="number" id="sop-dry-temp" class="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none">
+                        </div>
+                        <div class="bg-amber-50/60 p-3 rounded-xl border border-amber-200">
+                            <label class="block text-xs text-amber-800 mb-1">烘料時間 (hr)</label>
+                            <input type="number" step="0.5" id="sop-dry-time" class="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 三段射出與保壓設定區 -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- 三段射出壓力與速度表格 -->
+                    <div class="lg:col-span-2">
+                        <h4 class="text-sm font-bold text-slate-800 bg-slate-100 px-3 py-2 rounded-lg border-l-4 border-blue-600 flex items-center gap-2 mb-3">
+                            <i class="fa-solid fa-gauge-high text-blue-600"></i>
+                            二、三段射出參數設定 (3-Stage Injection)
+                        </h4>
+                        <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                            <table class="w-full text-sm text-left">
+                                <thead class="bg-slate-50 text-slate-600 text-xs border-b border-slate-200">
+                                    <tr>
+                                        <th class="py-2.5 px-3 font-semibold">參數項目</th>
+                                        <th class="py-2.5 px-3 font-semibold text-center bg-blue-50/50 text-blue-900">第一段 (Stage 1)</th>
+                                        <th class="py-2.5 px-3 font-semibold text-center bg-blue-50/30 text-blue-900">第二段 (Stage 2)</th>
+                                        <th class="py-2.5 px-3 font-semibold text-center bg-blue-50/10 text-blue-900">第三段 (Stage 3)</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                    <tr>
+                                        <td class="py-3 px-3 font-medium text-slate-700 bg-slate-50/50">射出壓力 (bar / %)</td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-p1" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-p2" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-p3" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-3 px-3 font-medium text-slate-700 bg-slate-50/50">射出速度 (mm/s / %)</td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-s1" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-emerald-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-s2" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-emerald-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-s3" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-emerald-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-3 px-3 font-medium text-slate-700 bg-slate-50/50">切換位置 (mm) <span class="text-xs text-slate-400 font-normal">(選填)</span></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-pos1" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-pos2" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-pos3" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 保壓設定 -->
+                    <div>
+                        <h4 class="text-sm font-bold text-slate-800 bg-slate-100 px-3 py-2 rounded-lg border-l-4 border-indigo-600 flex items-center gap-2 mb-3">
+                            <i class="fa-solid fa-compress text-indigo-600"></i>
+                            三、保壓設定 (Holding)
+                        </h4>
+                        <div class="grid grid-cols-1 gap-3 bg-indigo-50/40 p-4 rounded-xl border border-indigo-100">
+                            <div class="flex items-center justify-between gap-2">
+                                <label class="text-xs font-semibold text-slate-700">保壓壓力 (bar / %)</label>
+                                <input type="number" step="0.1" id="sop-hold-pressure" class="w-32 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-right focus:ring-2 focus:ring-indigo-500 outline-none">
+                            </div>
+                            <div class="flex items-center justify-between gap-2">
+                                <label class="text-xs font-semibold text-slate-700">保壓時間 (秒 s)</label>
+                                <input type="number" step="0.1" id="sop-hold-time" class="w-32 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-right focus:ring-2 focus:ring-indigo-500 outline-none">
+                            </div>
+                            <div class="flex items-center justify-between gap-2">
+                                <label class="text-xs font-semibold text-slate-700">V/P 切換位置 (mm)</label>
+                                <input type="number" step="0.1" id="sop-vp-switch" class="w-32 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-right focus:ring-2 focus:ring-indigo-500 outline-none">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. 計量、冷卻與開合模頂出 -->
+                <div>
+                    <h4 class="text-sm font-bold text-slate-800 bg-slate-100 px-3 py-2 rounded-lg border-l-4 border-emerald-600 flex items-center gap-2 mb-3">
+                        <i class="fa-solid fa-fan text-emerald-600"></i>
+                        四、計量儲料、冷卻與開合模設定 (Metering, Cooling & Ejection)
+                    </h4>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <label class="block text-xs text-slate-500 mb-1">計量行程 (mm)</label>
+                            <input type="number" step="0.1" id="sop-metering-stroke" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800">
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <label class="block text-xs text-slate-500 mb-1">鬆退距離 (mm)</label>
+                            <input type="number" step="0.1" id="sop-suck-back" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800">
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <label class="block text-xs text-slate-500 mb-1">儲料背壓 (bar)</label>
+                            <input type="number" step="0.1" id="sop-back-pressure" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800">
+                        </div>
+                        <div class="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200">
+                            <label class="block text-xs font-bold text-emerald-800 mb-1">冷卻時間 (秒 s)</label>
+                            <input type="number" step="0.1" id="sop-cooling-time" class="w-full bg-white border border-emerald-400 rounded-lg px-2.5 py-1.5 text-sm font-bold text-emerald-900">
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <label class="block text-xs text-slate-500 mb-1">開模行程 (mm)</label>
+                            <input type="number" step="0.1" id="sop-open-stroke" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800">
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <label class="block text-xs text-slate-500 mb-1">頂出行程 / 次數</label>
+                            <input type="text" id="sop-ejector" placeholder="如: 45mm / 2次" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 調機備註與注意事項 -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1.5">五、調機師傅交接備註 / 外觀檢驗重點：</label>
+                    <textarea id="sop-notes" rows="2" placeholder="記錄澆口修剪、外觀縮水注意位置、拔模劑使用規定等..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== 模組三：日常生產紀錄表 ==================== -->
+        <section id="tab-logs" class="tab-content hidden space-y-6">
+            <!-- 新增生產日報表單 -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
+                <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
+                    <i class="fa-solid fa-pen-to-square text-blue-600"></i>
+                    登記現場生產紀錄（自動同步至雲端）
+                </h2>
+
+                <form id="log-form" onsubmit="addProductionLog(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">生產日期</label>
+                        <input type="date" id="log-date" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">機台編號</label>
+                        <input type="text" id="log-machine" placeholder="如：#01 (120T)" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">生產產品</label>
+                        <select id="log-product-select" onchange="updateLogStandardPreview()" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                            <!-- JS 動態載入 -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">生產時數 (小時)</label>
+                        <input type="number" step="0.5" min="0.5" max="24" id="log-hours" value="8" oninput="updateLogStandardPreview()" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div class="bg-blue-50/70 p-2.5 rounded-xl border border-blue-200 flex flex-col justify-center">
+                        <span class="text-[11px] text-blue-700 font-semibold">系統推算標準應產量</span>
+                        <span id="log-std-preview" class="text-base font-bold text-blue-900">-- pcs</span>
+                    </div>
+
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-emerald-700 mb-1">實際良品數量 (OK pcs)</label>
+                        <input type="number" min="0" id="log-good-qty" placeholder="輸入良品數" required class="w-full bg-emerald-50/40 border border-emerald-300 rounded-xl px-3 py-2 text-sm font-bold text-emerald-900 focus:ring-2 focus:ring-emerald-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-rose-700 mb-1">不良品數 (NG pcs)</label>
+                        <input type="number" min="0" id="log-ng-qty" value="0" required class="w-full bg-rose-50/40 border border-rose-300 rounded-xl px-3 py-2 text-sm font-bold text-rose-900 focus:ring-2 focus:ring-rose-500 outline-none">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">異常原因或備註 (選填)</label>
+                        <input type="text" id="log-reason" placeholder="如：開機前10模短射、黑點、縮水..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-xl text-sm shadow-sm transition flex items-center justify-center space-x-1.5">
+                            <i class="fa-solid fa-plus-circle"></i>
+                            <span>新增紀錄</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 生產紀錄統計與清單 -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                <div class="p-4 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 bg-slate-50">
+                    <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-slate-600"></i>
+                        歷史生產紀錄與良率統計表
+                    </h3>
+                    <span id="log-summary-badge" class="text-xs font-medium text-slate-600 bg-white px-3 py-1 rounded-full border border-slate-200"></span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 text-xs uppercase">
+                                <th class="py-3 px-4 font-semibold">生產日期</th>
+                                <th class="py-3 px-4 font-semibold">機台</th>
+                                <th class="py-3 px-4 font-semibold">產品名稱</th>
+                                <th class="py-3 px-4 font-semibold text-center">生產時數</th>
+                                <th class="py-3 px-4 font-semibold text-right">標準應產</th>
+                                <th class="py-3 px-4 font-semibold text-right text-emerald-700">實際良品</th>
+                                <th class="py-3 px-4 font-semibold text-right text-rose-600">不良品(NG)</th>
+                                <th class="py-3 px-4 font-semibold text-center">生產良率</th>
+                                <th class="py-3 px-4 font-semibold text-center">產能達成率</th>
+                                <th class="py-3 px-4 font-semibold">備註原因</th>
+                                <th class="py-3 px-4 font-semibold text-center">刪除</th>
+                            </tr>
+                        </thead>
+                        <tbody id="log-table-body" class="divide-y divide-slate-200 text-sm">
+                            <!-- JS 動態生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== 模組四：排程與產能用料試算器 ==================== -->
+        <section id="tab-calc" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- 左側：輸入面板 -->
+                <div class="lg:col-span-5 bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-5">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-calculator text-blue-600"></i>
+                            訂單排程與塑料用量試算
+                        </h2>
+                        <p class="text-xs text-slate-500 mt-1">自動引用「模組一」的穴數、迴圈時間與成品/料頭重，精算完工時數與備料公斤數。</p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">1. 選擇要排程生產的產品：</label>
+                            <select id="calc-product-select" onchange="runScheduleCalc()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none">
+                                <!-- JS 動態填入 -->
+                            </select>
+                        </div>
+
+                        <!-- 產品帶出規格小卡 -->
+                        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-1.5 text-slate-600">
+                            <div class="flex justify-between"><span>塑料材質：</span><strong id="calc-info-mat" class="text-slate-800">--</strong></div>
+                            <div class="flex justify-between"><span>模具穴數 / 標準週期：</span><strong id="calc-info-cav-ct" class="text-slate-800">--</strong></div>
+                            <div class="flex justify-between"><span>單件成品重 / 料頭重：</span><strong id="calc-info-weight" class="text-slate-800">--</strong></div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">2. 輸入訂單目標數量 (pcs)：</label>
+                            <input type="number" id="calc-order-qty" value="50000" min="1" step="100" oninput="runScheduleCalc()" class="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-base font-bold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1.5">3. 每日預計開機 (小時)：</label>
+                                <input type="number" id="calc-daily-hours" value="20" min="1" max="24" oninput="runScheduleCalc()" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1.5">4. 試機/不良損耗緩衝 (%)：</label>
+                                <input type="number" id="calc-loss-rate" value="3" min="0" max="50" step="0.5" oninput="runScheduleCalc()" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右側：試算結果儀表板 -->
+                <div class="lg:col-span-7 space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <!-- 卡片 1：每小時標準產能 -->
+                        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex items-start justify-between">
+                            <div>
+                                <span class="text-xs font-semibold text-slate-400 uppercase">每小時標準產能</span>
+                                <div class="text-2xl font-extrabold text-slate-800 mt-1" id="res-hourly-output">-- <span class="text-sm font-normal text-slate-500">pcs / hr</span></div>
+                                <p class="text-xs text-slate-500 mt-2" id="res-Shots-per-hr">每小時約射出 -- 模次</p>
+                            </div>
+                            <div class="bg-blue-50 text-blue-600 p-3 rounded-xl">
+                                <i class="fa-solid fa-gauge text-xl"></i>
+                            </div>
+                        </div>
+
+                        <!-- 卡片 2：總需生產時數與天數 -->
+                        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex items-start justify-between">
+                            <div>
+                                <span class="text-xs font-semibold text-slate-400 uppercase">預計需要生產時間</span>
+                                <div class="text-2xl font-extrabold text-indigo-600 mt-1" id="res-total-hours">-- <span class="text-sm font-normal text-slate-500">小時</span></div>
+                                <p class="text-xs font-semibold text-indigo-900 bg-indigo-50 inline-block px-2 py-0.5 rounded mt-2" id="res-total-days">約需 -- 個工作天</p>
+                            </div>
+                            <div class="bg-indigo-50 text-indigo-600 p-3 rounded-xl">
+                                <i class="fa-solid fa-clock text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 卡片 3：塑料備料重量詳細分析 -->
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-weight-hanging text-emerald-600"></i>
+                                <h3 class="font-bold text-slate-800">塑料領料與重量分析 (Material Requirement)</h3>
+                            </div>
+                            <span id="res-mat-badge" class="text-xs font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-md">--</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                <div class="text-xs text-slate-500">淨成品總重 (不含料頭)</div>
+                                <div class="text-lg font-bold text-slate-800 mt-1" id="res-net-part-kg">-- kg</div>
+                            </div>
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                <div class="text-xs text-slate-500">料頭總重量 (水口料)</div>
+                                <div class="text-lg font-bold text-amber-700 mt-1" id="res-runner-kg">-- kg</div>
+                            </div>
+                            <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+                                <div class="text-xs font-bold text-emerald-800">建議總領料重量 (含損耗)</div>
+                                <div class="text-2xl font-extrabold text-emerald-700 mt-1" id="res-total-mat-kg">-- kg</div>
+                                <div class="text-[11px] text-emerald-600 mt-0.5" id="res-bags-hint">約合 25kg 包裝 -- 袋</div>
+                            </div>
+                        </div>
+
+                        <div class="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200/60 leading-relaxed">
+                            <i class="fa-solid fa-circle-info text-blue-500 mr-1"></i>
+                            <strong>計算公式說明：</strong> 總模次 = 訂單數量 ÷ 模穴數；每模總重 = (單件成品重 × 穴數) + 料頭重。建議總備料重已加上您設定的損耗緩衝比例。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ==================== 新增/編輯產品 Modal ==================== -->
+    <div id="product-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 space-y-5">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 id="modal-title" class="text-lg font-bold text-slate-800">新增產品與模具資料</h3>
+                <button onclick="closeProductModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="product-form" onsubmit="saveProduct(event)" class="space-y-4">
+                <input type="hidden" id="prod-id">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">產品料號 (Part No.)</label>
+                        <input type="text" id="prod-code" placeholder="如：INJ-A01" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">產品名稱</label>
+                        <input type="text" id="prod-name" placeholder="如：ABS 感測器上蓋" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">使用塑料材質與規格</label>
+                        <input type="text" id="prod-material" placeholder="如：奇美 ABS PA-757" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">模具穴數 (Cavities)</label>
+                        <input type="number" id="prod-cavities" min="1" value="2" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">單件成品重 (g)</label>
+                        <input type="number" step="0.1" min="0.1" id="prod-part-weight" placeholder="18.5" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">每模料頭重 (g)</label>
+                        <input type="number" step="0.1" min="0" id="prod-runner-weight" placeholder="6.0" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-blue-700 mb-1">標準週期時間 (秒)</label>
+                        <input type="number" step="0.5" min="1" id="prod-cycle-time" placeholder="28" required class="w-full bg-blue-50 border border-blue-300 rounded-xl px-3 py-2 text-sm font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+                    <button type="button" onclick="closeProductModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition">取消</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-medium shadow-sm transition">儲存產品</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 自訂提示訊息 Toast -->
+    <div id="toast-msg" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center space-x-2 opacity-0 pointer-events-none transition-opacity duration-300 z-50">
+        <i class="fa-solid fa-circle-check text-emerald-400"></i>
+        <span id="toast-text">操作成功</span>
+    </div>
+
+    <!-- Firebase 雲端即時同步腳本 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'injection-molding-sys';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "demo-key",
+            authDomain: "demo.firebaseapp.com",
+            projectId: "demo-project",
+            storageBucket: "demo.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123:web:abc"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        let appData = {
+            products: [],
+            sops: {},
+            logs: []
+        };
+
+        let isInitialized = false;
+
+        async function initCloudSync() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // 監聽雲端產品
+                const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
+                onSnapshot(productsRef, (snapshot) => {
+                    const loadedProducts = [];
+                    snapshot.forEach(docSnap => {
+                        loadedProducts.push({ id: docSnap.id, ...docSnap.data() });
+                    });
+
+                    if (loadedProducts.length > 0) {
+                        appData.products = loadedProducts;
+                    } else if (!isInitialized) {
+                        seedDefaultData();
+                    }
+                    refreshAllViews();
+                }, (error) => {
+                    console.error("Products sync error:", error);
+                });
+
+                // 監聽 Sops
+                const sopsRef = collection(db, 'artifacts', appId, 'public', 'data', 'sops');
+                onSnapshot(sopsRef, (snapshot) => {
+                    snapshot.forEach(docSnap => {
+                        appData.sops[docSnap.id] = docSnap.data();
+                    });
+                    loadSopForSelectedProduct();
+                }, (err) => console.error("SOPs sync error:", err));
+
+                // 監聽生產日報 logs
+                const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
+                onSnapshot(logsRef, (snapshot) => {
+                    const loadedLogs = [];
+                    snapshot.forEach(docSnap => {
+                        loadedLogs.push({ id: docSnap.id, ...docSnap.data() });
+                    });
+                    loadedLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    appData.logs = loadedLogs;
+                    renderLogs();
+                }, (err) => console.error("Logs sync error:", err));
+
+                isInitialized = true;
+            } catch (err) {
+                console.error("Auth / Cloud init failed:", err);
+                showToast("雲端連線失敗，請檢查網路");
+            }
+        }
+
+        async function seedDefaultData() {
+            const defaultProducts = [
+                {
+                    id: 'p1',
+                    code: 'INJ-A101',
+                    name: '控制器防水前蓋',
+                    material: 'ABS (奇美 PA-757)',
+                    cavities: 2,
+                    partWeight: 24.5,
+                    runnerWeight: 7.0,
+                    cycleTime: 30
+                },
+                {
+                    id: 'p2',
+                    code: 'INJ-B205',
+                    name: '高強度耐衝擊扣具',
+                    material: 'PP (台塑 1120)',
+                    cavities: 4,
+                    partWeight: 8.2,
+                    runnerWeight: 5.2,
+                    cycleTime: 20
+                }
+            ];
+
+            for (const p of defaultProducts) {
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', p.id), p);
+            }
+
+            const defaultSop = {
+                tempNozzle: 215, tempZ1: 220, tempZ2: 215, tempZ3: 205, tempZ4: 195,
+                tempMold: '55 / 50', dryTemp: 85, dryTime: 3,
+                injP1: 75, injP2: 65, injP3: 50,
+                injS1: 45, injS2: 60, injS3: 30,
+                injPos1: 42, injPos2: 25, injPos3: 10,
+                holdPressure: 45, holdTime: 3.5, vpSwitch: 10,
+                meteringStroke: 58, suckBack: 3.0, backPressure: 8,
+                coolingTime: 18, openStroke: 180, ejector: '40mm / 2次',
+                notes: '1. 第一段慢速過澆口防噴痕，第二段快速充模。\n2. 表面不可有流痕或縮水。'
+            };
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sops', 'p1'), defaultSop);
+        }
+
+        window.saveProduct = async function(e) {
+            e.preventDefault();
+            const id = document.getElementById('prod-id').value || 'p' + Date.now();
+            const product = {
+                code: document.getElementById('prod-code').value.trim(),
+                name: document.getElementById('prod-name').value.trim(),
+                material: document.getElementById('prod-material').value.trim(),
+                cavities: parseInt(document.getElementById('prod-cavities').value, 10) || 1,
+                partWeight: parseFloat(document.getElementById('prod-part-weight').value) || 0,
+                runnerWeight: parseFloat(document.getElementById('prod-runner-weight').value) || 0,
+                cycleTime: parseFloat(document.getElementById('prod-cycle-time').value) || 10
+            };
+
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id), product);
+            
+            const sopRef = doc(db, 'artifacts', appId, 'public', 'data', 'sops', id);
+            const sopSnap = await getDoc(sopRef);
+            if (!sopSnap.exists()) {
+                await setDoc(sopRef, {
+                    tempNozzle: 200, tempZ1: 205, tempZ2: 200, tempZ3: 190, tempZ4: 180,
+                    tempMold: '50 / 50', dryTemp: 80, dryTime: 3,
+                    injP1: 70, injP2: 60, injP3: 50,
+                    injS1: 50, injS2: 60, injS3: 40,
+                    injPos1: 40, injPos2: 20, injPos3: 8,
+                    holdPressure: 45, holdTime: 3.0, vpSwitch: 8,
+                    meteringStroke: 50, suckBack: 2.5, backPressure: 5,
+                    coolingTime: 15, openStroke: 150, ejector: '35mm / 1次',
+                    notes: ''
+                });
+            }
+
+            closeProductModal();
+            showToast('產品資料已儲存至雲端');
+        };
+
+        window.deleteProduct = async function(productId) {
+            if (appData.products.length <= 1) {
+                showToast('系統至少需保留一項產品資料');
+                return;
+            }
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', productId));
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sops', productId));
+            showToast('產品已自雲端刪除');
+        };
+
+        window.saveSopData = async function() {
+            const prodId = document.getElementById('sop-product-select').value;
+            if (!prodId) return;
+
+            const sopData = {
+                tempNozzle: document.getElementById('sop-temp-nozzle').value,
+                tempZ1: document.getElementById('sop-temp-z1').value,
+                tempZ2: document.getElementById('sop-temp-z2').value,
+                tempZ3: document.getElementById('sop-temp-z3').value,
+                tempZ4: document.getElementById('sop-temp-z4').value,
+                tempMold: document.getElementById('sop-temp-mold').value,
+                dryTemp: document.getElementById('sop-dry-temp').value,
+                dryTime: document.getElementById('sop-dry-time').value,
+                injP1: document.getElementById('sop-inj-p1').value,
+                injP2: document.getElementById('sop-inj-p2').value,
+                injP3: document.getElementById('sop-inj-p3').value,
+                injS1: document.getElementById('sop-inj-s1').value,
+                injS2: document.getElementById('sop-inj-s2').value,
+                injS3: document.getElementById('sop-inj-s3').value,
+                injPos1: document.getElementById('sop-inj-pos1').value,
+                injPos2: document.getElementById('sop-inj-pos2').value,
+                injPos3: document.getElementById('sop-inj-pos3').value,
+                holdPressure: document.getElementById('sop-hold-pressure').value,
+                holdTime: document.getElementById('sop-hold-time').value,
+                vpSwitch: document.getElementById('sop-vp-switch').value,
+                meteringStroke: document.getElementById('sop-metering-stroke').value,
+                suckBack: document.getElementById('sop-suck-back').value,
+                backPressure: document.getElementById('sop-back-pressure').value,
+                coolingTime: document.getElementById('sop-cooling-time').value,
+                openStroke: document.getElementById('sop-open-stroke').value,
+                ejector: document.getElementById('sop-ejector').value,
+                notes: document.getElementById('sop-notes').value
+            };
+
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sops', prodId), sopData);
+            showToast('成型條件表 (SOP) 已同步至雲端！');
+        };
+
+        window.addProductionLog = async function(e) {
+            e.preventDefault();
+            const logId = 'l' + Date.now();
+            const newLog = {
+                date: document.getElementById('log-date').value,
+                machine: document.getElementById('log-machine').value.trim(),
+                productId: document.getElementById('log-product-select').value,
+                hours: parseFloat(document.getElementById('log-hours').value) || 0,
+                goodQty: parseInt(document.getElementById('log-good-qty').value, 10) || 0,
+                ngQty: parseInt(document.getElementById('log-ng-qty').value, 10) || 0,
+                reason: document.getElementById('log-reason').value.trim()
+            };
+
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId), newLog);
+            document.getElementById('log-good-qty').value = '';
+            document.getElementById('log-ng-qty').value = '0';
+            document.getElementById('log-reason').value = '';
+            showToast('生產紀錄已即時上傳雲端');
+        };
+
+        window.deleteLog = async function(logId) {
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId));
+            showToast('生產紀錄已刪除');
+        };
+
+        initCloudSync();
+    </script>
+
+    <!-- UI 互動邏輯 -->
+    <script>
+        function showToast(message) {
+            const toast = document.getElementById('toast-msg');
+            document.getElementById('toast-text').textContent = message;
+            toast.classList.remove('opacity-0');
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+            }, 2600);
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'text-blue-400', 'bg-slate-900/50');
+                btn.classList.add('border-transparent', 'text-slate-300');
+            });
+
+            const activeBtn = document.getElementById('btn-' + tabId);
+            activeBtn.classList.remove('border-transparent', 'text-slate-300');
+            activeBtn.classList.add('border-blue-500', 'text-blue-400', 'bg-slate-900/50');
+        }
+
+        function renderProducts() {
+            const tbody = document.getElementById('product-table-body');
+            tbody.innerHTML = '';
+
+            appData.products.forEach(p => {
+                const totalShotWeight = (p.partWeight * p.cavities + p.runnerWeight).toFixed(1);
+                const hourlyOutput = Math.floor((3600 / p.cycleTime) * p.cavities);
+
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50/80 transition';
+                tr.innerHTML = `
+                    <td class="py-3.5 px-4">
+                        <div class="font-bold text-slate-800">${p.name}</div>
+                        <div class="text-xs font-mono text-blue-600">${p.code}</div>
+                    </td>
+                    <td class="py-3.5 px-4">
+                        <span class="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-xs font-medium border border-slate-200">${p.material}</span>
+                    </td>
+                    <td class="py-3.5 px-4 text-center font-semibold text-slate-700">${p.cavities} 穴</td>
+                    <td class="py-3.5 px-4 text-right font-mono">${p.partWeight.toFixed(1)} g</td>
+                    <td class="py-3.5 px-4 text-right font-mono text-slate-500">${p.runnerWeight.toFixed(1)} g</td>
+                    <td class="py-3.5 px-4 text-right font-mono font-semibold text-slate-800">${totalShotWeight} g</td>
+                    <td class="py-3.5 px-4 text-center">
+                        <span class="bg-blue-50 text-blue-700 font-bold px-2.5 py-1 rounded-lg text-xs">${p.cycleTime} s</span>
+                    </td>
+                    <td class="py-3.5 px-4 text-right font-bold text-emerald-700">${hourlyOutput.toLocaleString()} pcs</td>
+                    <td class="py-3.5 px-4 text-center space-x-1">
+                        <button onclick="viewProductSop('${p.id}')" title="查看/編輯成型條件" class="text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-lg transition">
+                            <i class="fa-solid fa-sliders"></i>
+                        </button>
+                        <button onclick="openProductModal('${p.id}')" title="編輯規格" class="text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button onclick="deleteProduct('${p.id}')" title="刪除產品" class="text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg transition">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            populateProductDropdowns();
+        }
+
+        function populateProductDropdowns() {
+            const selects = ['sop-product-select', 'log-product-select', 'calc-product-select'];
+            selects.forEach(selectId => {
+                const selectEl = document.getElementById(selectId);
+                const currentVal = selectEl.value;
+                selectEl.innerHTML = '';
+                appData.products.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = `[${p.code}] ${p.name} (${p.cavities}穴 / ${p.cycleTime}s)`;
+                    selectEl.appendChild(opt);
+                });
+                if (currentVal && appData.products.some(p => p.id === currentVal)) {
+                    selectEl.value = currentVal;
+                }
+            });
+            loadSopForSelectedProduct();
+            updateLogStandardPreview();
+            runScheduleCalc();
+        }
+
+        function openProductModal(productId = null) {
+            const modal = document.getElementById('product-modal');
+            const title = document.getElementById('modal-title');
+            if (productId) {
+                const p = appData.products.find(x => x.id === productId);
+                if (!p) return;
+                title.textContent = '編輯產品與模具規格';
+                document.getElementById('prod-id').value = p.id;
+                document.getElementById('prod-code').value = p.code;
+                document.getElementById('prod-name').value = p.name;
+                document.getElementById('prod-material').value = p.material;
+                document.getElementById('prod-cavities').value = p.cavities;
+                document.getElementById('prod-part-weight').value = p.partWeight;
+                document.getElementById('prod-runner-weight').value = p.runnerWeight;
+                document.getElementById('prod-cycle-time').value = p.cycleTime;
+            } else {
+                title.textContent = '新增產品與模具資料';
+                document.getElementById('product-form').reset();
+                document.getElementById('prod-id').value = '';
+            }
+            modal.classList.remove('hidden');
+        }
+
+        function closeProductModal() {
+            document.getElementById('product-modal').classList.add('hidden');
+        }
+
+        function viewProductSop(productId) {
+            switchTab('tab-sop');
+            document.getElementById('sop-product-select').value = productId;
+            loadSopForSelectedProduct();
+        }
+
+        function loadSopForSelectedProduct() {
+            const prodId = document.getElementById('sop-product-select').value;
+            const product = appData.products.find(x => x.id === prodId);
+            if (!product) return;
+
+            document.getElementById('sop-card-partno').textContent = product.code;
+            document.getElementById('sop-card-partname').textContent = product.name;
+            document.getElementById('sop-card-material').textContent = product.material;
+            document.getElementById('sop-card-cavities').textContent = product.cavities;
+            document.getElementById('sop-card-cycletime').textContent = product.cycleTime;
+            document.getElementById('sop-card-weights').textContent = `單件 ${product.partWeight}g / 料頭 ${product.runnerWeight}g`;
+
+            const sop = appData.sops[prodId] || {};
+            const fields = {
+                'sop-temp-nozzle': sop.tempNozzle ?? '',
+                'sop-temp-z1': sop.tempZ1 ?? '',
+                'sop-temp-z2': sop.tempZ2 ?? '',
+                'sop-temp-z3': sop.tempZ3 ?? '',
+                'sop-temp-z4': sop.tempZ4 ?? '',
+                'sop-temp-mold': sop.tempMold ?? '',
+                'sop-dry-temp': sop.dryTemp ?? '',
+                'sop-dry-time': sop.dryTime ?? '',
+                'sop-inj-p1': sop.injP1 ?? '',
+                'sop-inj-p2': sop.injP2 ?? '',
+                'sop-inj-p3': sop.injP3 ?? '',
+                'sop-inj-s1': sop.injS1 ?? '',
+                'sop-inj-s2': sop.injS2 ?? '',
+                'sop-inj-s3': sop.injS3 ?? '',
+                'sop-inj-pos1': sop.injPos1 ?? '',
+                'sop-inj-pos2': sop.injPos2 ?? '',
+                'sop-inj-pos3': sop.injPos3 ?? '',
+                'sop-hold-pressure': sop.holdPressure ?? '',
+                'sop-hold-time': sop.holdTime ?? '',
+                'sop-vp-switch': sop.vpSwitch ?? '',
+                'sop-metering-stroke': sop.meteringStroke ?? '',
+                'sop-suck-back': sop.suckBack ?? '',
+                'sop-back-pressure': sop.backPressure ?? '',
+                'sop-cooling-time': sop.coolingTime ?? '',
+                'sop-open-stroke': sop.openStroke ?? '',
+                'sop-ejector': sop.ejector ?? '',
+                'sop-notes': sop.notes ?? ''
+            };
+
+            Object.entries(fields).forEach(([id, val]) => {
+                const el = document.getElementById(id);
+                if (el) el.value = val;
+            });
+        }
+
+        function updateLogStandardPreview() {
+            const prodId = document.getElementById('log-product-select').value;
+            const hours = parseFloat(document.getElementById('log-hours').value) || 0;
+            const product = appData.products.find(x => x.id === prodId);
+
+            if (!product || hours <= 0) {
+                document.getElementById('log-std-preview').textContent = '-- pcs';
+                return;
+            }
+
+            const stdQty = Math.round((3600 / product.cycleTime) * product.cavities * hours);
+            document.getElementById('log-std-preview').textContent = stdQty.toLocaleString() + ' pcs';
+        }
+
+        function renderLogs() {
+            const tbody = document.getElementById('log-table-body');
+            tbody.innerHTML = '';
+
+            let totalGood = 0;
+            let totalNg = 0;
+
+            appData.logs.forEach(log => {
+                const product = appData.products.find(x => x.id === log.productId);
+                const prodName = product ? `${product.name} (${product.code})` : '已刪除產品';
+                const stdQty = product ? Math.round((3600 / product.cycleTime) * product.cavities * log.hours) : 0;
+
+                const totalProduced = log.goodQty + log.ngQty;
+                const yieldRate = totalProduced > 0 ? ((log.goodQty / totalProduced) * 100).toFixed(1) : '0.0';
+                const achieveRate = stdQty > 0 ? ((log.goodQty / stdQty) * 100).toFixed(1) : '--';
+
+                totalGood += log.goodQty;
+                totalNg += log.ngQty;
+
+                const yieldBadgeColor = parseFloat(yieldRate) >= 98 ? 'bg-emerald-100 text-emerald-800' : (parseFloat(yieldRate) >= 95 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800');
+
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition';
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-mono text-xs text-slate-600">${log.date}</td>
+                    <td class="py-3 px-4 font-semibold text-slate-800">${log.machine}</td>
+                    <td class="py-3 px-4 font-medium text-slate-800">${prodName}</td>
+                    <td class="py-3 px-4 text-center font-mono">${log.hours} hr</td>
+                    <td class="py-3 px-4 text-right font-mono text-slate-500">${stdQty.toLocaleString()}</td>
+                    <td class="py-3 px-4 text-right font-mono font-bold text-emerald-700">${log.goodQty.toLocaleString()}</td>
+                    <td class="py-3 px-4 text-right font-mono font-semibold text-rose-600">${log.ngQty.toLocaleString()}</td>
+                    <td class="py-3 px-4 text-center">
+                        <span class="${yieldBadgeColor} px-2.5 py-0.5 rounded-full text-xs font-bold">${yieldRate}%</span>
+                    </td>
+                    <td class="py-3 px-4 text-center font-mono text-xs font-semibold text-blue-700">${achieveRate}%</td>
+                    <td class="py-3 px-4 text-xs text-slate-500 max-w-xs truncate" title="${log.reason}">${log.reason || '-'}</td>
+                    <td class="py-3 px-4 text-center">
+                        <button onclick="deleteLog('${log.id}')" class="text-slate-400 hover:text-rose-600 transition">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            const overallTotal = totalGood + totalNg;
+            const overallYield = overallTotal > 0 ? ((totalGood / overallTotal) * 100).toFixed(1) : '0.0';
+            document.getElementById('log-summary-badge').textContent = `累計良品：${totalGood.toLocaleString()} pcs ｜ 平均良率：${overallYield}%`;
+        }
+
+        function runScheduleCalc() {
+            const prodId = document.getElementById('calc-product-select').value;
+            const product = appData.products.find(x => x.id === prodId);
+            if (!product) return;
+
+            const orderQty = parseInt(document.getElementById('calc-order-qty').value, 10) || 0;
+            const dailyHours = parseFloat(document.getElementById('calc-daily-hours').value) || 20;
+            const lossRate = parseFloat(document.getElementById('calc-loss-rate').value) || 0;
+
+            document.getElementById('calc-info-mat').textContent = product.material;
+            document.getElementById('calc-info-cav-ct').textContent = `${product.cavities} 穴 / ${product.cycleTime} 秒`;
+            document.getElementById('calc-info-weight').textContent = `成品 ${product.partWeight}g / 料頭 ${product.runnerWeight}g`;
+
+            const shotsPerHour = 3600 / product.cycleTime;
+            const hourlyOutput = shotsPerHour * product.cavities;
+            const totalShotsNeeded = Math.ceil(orderQty / product.cavities);
+            const totalHoursNeeded = orderQty > 0 ? (orderQty / hourlyOutput) : 0;
+            const totalDaysNeeded = dailyHours > 0 ? (totalHoursNeeded / dailyHours) : 0;
+
+            const netPartKg = (orderQty * product.partWeight) / 1000;
+            const runnerKg = (totalShotsNeeded * product.runnerWeight) / 1000;
+            const totalMatWithLossKg = (netPartKg + runnerKg) * (1 + lossRate / 100);
+            const bags25kg = Math.ceil(totalMatWithLossKg / 25);
+
+            document.getElementById('res-hourly-output').innerHTML = `${Math.floor(hourlyOutput).toLocaleString()} <span class="text-sm font-normal text-slate-500">pcs / hr</span>`;
+            document.getElementById('res-Shots-per-hr').textContent = `每小時約射出 ${Math.floor(shotsPerHour)} 模次 (共需 ${totalShotsNeeded.toLocaleString()} 模次)`;
+
+            document.getElementById('res-total-hours').innerHTML = `${totalHoursNeeded.toFixed(1)} <span class="text-sm font-normal text-slate-500">小時</span>`;
+            document.getElementById('res-total-days').textContent = `以每日開機 ${dailyHours} 小時計算，約需 ${totalDaysNeeded.toFixed(1)} 個工作天`;
+
+            document.getElementById('res-mat-badge').textContent = product.material;
+            document.getElementById('res-net-part-kg').textContent = `${netPartKg.toFixed(2)} kg`;
+            document.getElementById('res-runner-kg').textContent = `${runnerKg.toFixed(2)} kg`;
+            document.getElementById('res-total-mat-kg').textContent = `${totalMatWithLossKg.toFixed(2)} kg`;
+            document.getElementById('res-bags-hint').textContent = `建議領料：約合標準 25kg 包裝 ${bags25kg} 袋`;
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData, null, 2));
+            const downloadAnchor = document.createElement('a');
+            const today = new Date().toISOString().slice(0, 10);
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `射出成型管理系統備份_${today}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast('已匯出系統備份檔 (JSON)');
+        }
+
+        function refreshAllViews() {
+            renderProducts();
+            loadSopForSelectedProduct();
+            updateLogStandardPreview();
+            renderLogs();
+            runScheduleCalc();
+        }
+
+        window.onload = function() {
+            document.getElementById('log-date').value = new Date().toISOString().slice(0, 10);
+        };
+    </script>
+</body>
+</html>
