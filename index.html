@@ -628,7 +628,11 @@
                     await signInAnonymously(auth);
                 }
 
-                // 監聽雲端產品
+                // 確保登入完成後再存取 Firestore 集合路徑
+                const user = auth.currentUser;
+                if (!user) return;
+
+                // 監聽雲端產品 (依照規定路徑 /artifacts/{appId}/public/data/{collectionName})
                 const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
                 onSnapshot(productsRef, (snapshot) => {
                     const loadedProducts = [];
@@ -675,6 +679,9 @@
         }
 
         async function seedDefaultData() {
+            const user = auth.currentUser;
+            if (!user) return;
+
             const defaultProducts = [
                 {
                     id: 'p1',
@@ -718,6 +725,12 @@
 
         window.saveProduct = async function(e) {
             e.preventDefault();
+            const user = auth.currentUser;
+            if (!user) {
+                showToast("尚未完成雲端驗證，請重新整理網頁");
+                return;
+            }
+
             const id = document.getElementById('prod-id').value || 'p' + Date.now();
             const product = {
                 code: document.getElementById('prod-code').value.trim(),
@@ -752,6 +765,9 @@
         };
 
         window.deleteProduct = async function(productId) {
+            const user = auth.currentUser;
+            if (!user) return;
+
             if (appData.products.length <= 1) {
                 showToast('系統至少需保留一項產品資料');
                 return;
@@ -762,6 +778,9 @@
         };
 
         window.saveSopData = async function() {
+            const user = auth.currentUser;
+            if (!user) return;
+
             const prodId = document.getElementById('sop-product-select').value;
             if (!prodId) return;
 
@@ -801,6 +820,9 @@
 
         window.addProductionLog = async function(e) {
             e.preventDefault();
+            const user = auth.currentUser;
+            if (!user) return;
+
             const logId = 'l' + Date.now();
             const newLog = {
                 date: document.getElementById('log-date').value,
@@ -820,6 +842,9 @@
         };
 
         window.deleteLog = async function(logId) {
+            const user = auth.currentUser;
+            if (!user) return;
+
             await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId));
             showToast('生產紀錄已刪除');
         };
