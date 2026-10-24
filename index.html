@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>射出成型產品與生產管理系統 (雲端即時同步版)</title>
+    <title>射出成型產品與生產管理系統</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts: Inter & Noto Sans TC -->
@@ -17,7 +17,7 @@
             background-color: #f1f5f9;
         }
         
-        /* 列印專用樣式：隱藏非必要導覽列，只顯示條件卡 */
+        /* 列印專用樣式：只列印 SOP 條件卡 */
         @media print {
             body * {
                 visibility: hidden;
@@ -40,7 +40,6 @@
             }
         }
 
-        /* 隱藏滾動條但保留滾動功能 */
         .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
@@ -61,12 +60,24 @@
                 </div>
                 <div>
                     <h1 class="text-lg sm:text-xl font-bold tracking-wide">射出成型生產與條件管理系統</h1>
-                    <p class="text-xs text-slate-400 hidden sm:block">產品規格 ‧ 三段射出工藝 SOP ‧ 生產良率 ‧ 排程試算 <span class="text-emerald-400 font-semibold">(🔥 雲端即時同步中)</span></p>
+                    <div class="flex items-center space-x-2 mt-0.5">
+                        <span id="sync-status-indicator" class="inline-flex items-center text-xs font-semibold text-emerald-400">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
+                            雲端連線中...
+                        </span>
+                        <span class="text-xs text-slate-400 hidden sm:inline">｜ 專案：sunghsing</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- 共用與備份工具按鈕 -->
+            <!-- 工具按鈕 -->
             <div class="flex items-center space-x-2">
+                <button onclick="document.getElementById('import-file-input').click()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center space-x-1.5 shadow-sm">
+                    <i class="fa-solid fa-upload text-emerald-400"></i>
+                    <span>匯入資料</span>
+                </button>
+                <input type="file" id="import-file-input" accept=".json" onchange="importData(event)" class="hidden">
+
                 <button onclick="exportData()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center space-x-1.5 shadow-sm">
                     <i class="fa-solid fa-download text-blue-400"></i>
                     <span>備份下載</span>
@@ -106,9 +117,9 @@
                 <div>
                     <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
                         <i class="fa-solid fa-cube text-blue-600"></i>
-                        產品與模具靜態資料庫
+                        產品與模具基本資料庫
                     </h2>
-                    <p class="text-sm text-slate-500 mt-0.5">管理所有塑膠射出件的基本規格、穴數、重量與標準成型迴圈時間（Cycle Time）。</p>
+                    <p class="text-sm text-slate-500 mt-0.5">管理所有塑膠射出件的規格、穴數、重量與標準成型週期時間（Cycle Time）。</p>
                 </div>
                 <button onclick="openProductModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center justify-center space-x-2 shrink-0">
                     <i class="fa-solid fa-plus"></i>
@@ -134,7 +145,7 @@
                             </tr>
                         </thead>
                         <tbody id="product-table-body" class="divide-y divide-slate-200 text-sm">
-                            <!-- 由 JS 動態生成 -->
+                            <!-- JS 動態生成 -->
                         </tbody>
                     </table>
                 </div>
@@ -148,13 +159,13 @@
                 <div class="flex-1 max-w-xl">
                     <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">選擇要查閱或設定成型條件的產品：</label>
                     <select id="sop-product-select" onchange="loadSopForSelectedProduct()" class="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
-                        <!-- 由 JS 動態填入 -->
+                        <!-- JS 動態填入 -->
                     </select>
                 </div>
                 <div class="flex flex-wrap items-center gap-2.5">
                     <button onclick="saveSopData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center space-x-2">
-                        <i class="fa-solid fa-floppy-disk"></i>
-                        <span>儲存條件參數</span>
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span>儲存成型條件至雲端</span>
                     </button>
                     <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center space-x-2">
                         <i class="fa-solid fa-print"></i>
@@ -165,7 +176,6 @@
 
             <!-- 可列印的標準成型條件卡區域 -->
             <div id="printable-sop-card" class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 space-y-6">
-                <!-- 條件卡標頭 -->
                 <div class="border-b-2 border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                         <div class="flex items-center space-x-2">
@@ -181,7 +191,7 @@
                     </div>
                 </div>
 
-                <!-- 1. 溫度設定區 (料管、模溫、烘料) -->
+                <!-- 1. 溫度與乾燥設定 -->
                 <div>
                     <h4 class="text-sm font-bold text-slate-800 bg-slate-100 px-3 py-2 rounded-lg border-l-4 border-amber-500 flex items-center gap-2 mb-3">
                         <i class="fa-solid fa-temperature-high text-amber-600"></i>
@@ -209,7 +219,7 @@
                             <input type="number" id="sop-temp-z4" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
                         </div>
                         <div class="bg-amber-50/60 p-3 rounded-xl border border-amber-200">
-                            <label class="block text-xs text-amber-800 mb-1">公模/母模溫 °C</label>
+                            <label class="block text-xs text-amber-800 mb-1">模具溫度 °C</label>
                             <input type="text" id="sop-temp-mold" placeholder="如: 50 / 50" class="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none">
                         </div>
                         <div class="bg-amber-50/60 p-3 rounded-xl border border-amber-200">
@@ -225,7 +235,6 @@
 
                 <!-- 2. 三段射出與保壓設定區 -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <!-- 三段射出壓力與速度表格 -->
                     <div class="lg:col-span-2">
                         <h4 class="text-sm font-bold text-slate-800 bg-slate-100 px-3 py-2 rounded-lg border-l-4 border-blue-600 flex items-center gap-2 mb-3">
                             <i class="fa-solid fa-gauge-high text-blue-600"></i>
@@ -288,11 +297,11 @@
                     </div>
                 </div>
 
-                <!-- 4. 計量、冷卻與開合模頂出 -->
+                <!-- 4. 計量、冷卻與開模 -->
                 <div>
                     <h4 class="text-sm font-bold text-slate-800 bg-slate-100 px-3 py-2 rounded-lg border-l-4 border-emerald-600 flex items-center gap-2 mb-3">
                         <i class="fa-solid fa-fan text-emerald-600"></i>
-                        四、計量儲料、冷卻與開合模設定 (Metering, Cooling & Ejection)
+                        四、計量儲料、冷卻與開合模設定 (Cooling & Ejection)
                     </h4>
                     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
@@ -317,26 +326,25 @@
                         </div>
                         <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
                             <label class="block text-xs text-slate-500 mb-1">頂出行程 / 次數</label>
-                            <input type="text" id="sop-ejector" placeholder="如: 45mm / 2次" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800">
+                            <input type="text" id="sop-ejector" placeholder="如: 40mm / 2次" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800">
                         </div>
                     </div>
                 </div>
 
-                <!-- 調機備註與注意事項 -->
+                <!-- 調機備註 -->
                 <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1.5">五、調機師傅交接備註 / 外觀檢驗重點：</label>
-                    <textarea id="sop-notes" rows="2" placeholder="記錄澆口修剪、外觀縮水注意位置、拔模劑使用規定等..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+                    <label class="block text-xs font-bold text-slate-600 mb-1.5">五、調機備註與外觀檢驗重點：</label>
+                    <textarea id="sop-notes" rows="2" placeholder="記錄澆口修剪方式、外觀縮水注意位置、潤滑劑使用等..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
                 </div>
             </div>
         </section>
 
         <!-- ==================== 模組三：日常生產紀錄表 ==================== -->
         <section id="tab-logs" class="tab-content hidden space-y-6">
-            <!-- 新增生產日報表單 -->
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
                 <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
                     <i class="fa-solid fa-pen-to-square text-blue-600"></i>
-                    登記現場生產紀錄（自動同步至雲端）
+                    登記現場生產紀錄
                 </h2>
 
                 <form id="log-form" onsubmit="addProductionLog(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
@@ -373,7 +381,7 @@
                     </div>
                     <div class="sm:col-span-2">
                         <label class="block text-xs font-semibold text-slate-600 mb-1">異常原因或備註 (選填)</label>
-                        <input type="text" id="log-reason" placeholder="如：開機前10模短射、黑點、縮水..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="text" id="log-reason" placeholder="如：開機短射、黑點、縮水..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
                     <div class="flex items-end">
                         <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-xl text-sm shadow-sm transition flex items-center justify-center space-x-1.5">
@@ -428,7 +436,7 @@
                             <i class="fa-solid fa-calculator text-blue-600"></i>
                             訂單排程與塑料用量試算
                         </h2>
-                        <p class="text-xs text-slate-500 mt-1">自動引用「模組一」的穴數、迴圈時間與成品/料頭重，精算完工時數與備料公斤數。</p>
+                        <p class="text-xs text-slate-500 mt-1">自動引用模穴數、週期時間與成品/料頭重，精算完工時數與備料公斤數。</p>
                     </div>
 
                     <div class="space-y-4">
@@ -439,7 +447,7 @@
                             </select>
                         </div>
 
-                        <!-- 產品帶出規格小卡 -->
+                        <!-- 產品規格小卡 -->
                         <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-1.5 text-slate-600">
                             <div class="flex justify-between"><span>塑料材質：</span><strong id="calc-info-mat" class="text-slate-800">--</strong></div>
                             <div class="flex justify-between"><span>模具穴數 / 標準週期：</span><strong id="calc-info-cav-ct" class="text-slate-800">--</strong></div>
@@ -464,22 +472,20 @@
                     </div>
                 </div>
 
-                <!-- 右側：試算結果儀表板 -->
+                <!-- 右側：試算結果 -->
                 <div class="lg:col-span-7 space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <!-- 卡片 1：每小時標準產能 -->
                         <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex items-start justify-between">
                             <div>
                                 <span class="text-xs font-semibold text-slate-400 uppercase">每小時標準產能</span>
                                 <div class="text-2xl font-extrabold text-slate-800 mt-1" id="res-hourly-output">-- <span class="text-sm font-normal text-slate-500">pcs / hr</span></div>
-                                <p class="text-xs text-slate-500 mt-2" id="res-Shots-per-hr">每小時約射出 -- 模次</p>
+                                <p class="text-xs text-slate-500 mt-2" id="res-shots-per-hr">每小時約射出 -- 模次</p>
                             </div>
                             <div class="bg-blue-50 text-blue-600 p-3 rounded-xl">
                                 <i class="fa-solid fa-gauge text-xl"></i>
                             </div>
                         </div>
 
-                        <!-- 卡片 2：總需生產時數與天數 -->
                         <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex items-start justify-between">
                             <div>
                                 <span class="text-xs font-semibold text-slate-400 uppercase">預計需要生產時間</span>
@@ -492,7 +498,7 @@
                         </div>
                     </div>
 
-                    <!-- 卡片 3：塑料備料重量詳細分析 -->
+                    <!-- 備料分析卡片 -->
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
                         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                             <div class="flex items-center gap-2">
@@ -520,7 +526,7 @@
 
                         <div class="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200/60 leading-relaxed">
                             <i class="fa-solid fa-circle-info text-blue-500 mr-1"></i>
-                            <strong>計算公式說明：</strong> 總模次 = 訂單數量 ÷ 模穴數；每模總重 = (單件成品重 × 穴數) + 料頭重。建議總備料重已加上您設定的損耗緩衝比例。
+                            <strong>公式說明：</strong> 總模次 = 訂單數量 ÷ 模穴數；每模總重 = (單件成品重 × 穴數) + 料頭重。建議總備料重已加上您設定的損耗緩衝。
                         </div>
                     </div>
                 </div>
@@ -554,7 +560,7 @@
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">使用塑料材質與規格</label>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">使用塑料材質規格</label>
                         <input type="text" id="prod-material" placeholder="如：奇美 ABS PA-757" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
                     <div>
@@ -573,116 +579,49 @@
                         <input type="number" step="0.1" min="0" id="prod-runner-weight" placeholder="6.0" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-blue-700 mb-1">標準週期時間 (秒)</label>
+                        <label class="block text-xs font-semibold text-blue-700 mb-1">週期時間 (秒)</label>
                         <input type="number" step="0.5" min="1" id="prod-cycle-time" placeholder="28" required class="w-full bg-blue-50 border border-blue-300 rounded-xl px-3 py-2 text-sm font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
                 </div>
 
                 <div class="flex justify-end space-x-2 pt-3 border-t border-slate-100">
                     <button type="button" onclick="closeProductModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition">取消</button>
-                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-medium shadow-sm transition">儲存產品</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-medium shadow-sm transition">儲存產品並同步雲端</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- 自訂提示訊息 Toast -->
+    <!-- 提示訊息 Toast -->
     <div id="toast-msg" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center space-x-2 opacity-0 pointer-events-none transition-opacity duration-300 z-50">
         <i class="fa-solid fa-circle-check text-emerald-400"></i>
         <span id="toast-text">操作成功</span>
     </div>
 
-    <!-- Firebase 雲端即時同步腳本 -->
+    <!-- 載入 Firebase 9 模組 -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'injection-molding-sys';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "demo-key",
-            authDomain: "demo.firebaseapp.com",
-            projectId: "demo-project",
-            storageBucket: "demo.appspot.com",
-            messagingSenderId: "123456789",
-            appId: "1:123:web:abc"
+        // 嵌入您的專屬 Firebase 設定
+        const firebaseConfig = {
+            apiKey: "AIzaSyDqFzF8L3N1-gxmycxJc8Y4FFQKXiNN2ds",
+            authDomain: "sunghsing.firebaseapp.com",
+            databaseURL: "https://sunghsing-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "sunghsing",
+            storageBucket: "sunghsing.firebasestorage.app",
+            messagingSenderId: "12105900713",
+            appId: "1:12105900713:web:c747d7d6a82f754b90ffb8",
+            measurementId: "G-CQNZHLEVHD"
         };
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
+        const LOCAL_STORAGE_KEY = 'INJECTION_MOLDING_APP_DATA_V1';
+        let db = null;
+        let isCloudConnected = false;
 
-        let appData = {
-            products: [],
-            sops: {},
-            logs: []
-        };
-
-        let isInitialized = false;
-
-        async function initCloudSync() {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                // 確保登入完成後再存取 Firestore 集合路徑
-                const user = auth.currentUser;
-                if (!user) return;
-
-                // 監聽雲端產品 (依照規定路徑 /artifacts/{appId}/public/data/{collectionName})
-                const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
-                onSnapshot(productsRef, (snapshot) => {
-                    const loadedProducts = [];
-                    snapshot.forEach(docSnap => {
-                        loadedProducts.push({ id: docSnap.id, ...docSnap.data() });
-                    });
-
-                    if (loadedProducts.length > 0) {
-                        appData.products = loadedProducts;
-                    } else if (!isInitialized) {
-                        seedDefaultData();
-                    }
-                    refreshAllViews();
-                }, (error) => {
-                    console.error("Products sync error:", error);
-                });
-
-                // 監聽 Sops
-                const sopsRef = collection(db, 'artifacts', appId, 'public', 'data', 'sops');
-                onSnapshot(sopsRef, (snapshot) => {
-                    snapshot.forEach(docSnap => {
-                        appData.sops[docSnap.id] = docSnap.data();
-                    });
-                    loadSopForSelectedProduct();
-                }, (err) => console.error("SOPs sync error:", err));
-
-                // 監聽生產日報 logs
-                const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
-                onSnapshot(logsRef, (snapshot) => {
-                    const loadedLogs = [];
-                    snapshot.forEach(docSnap => {
-                        loadedLogs.push({ id: docSnap.id, ...docSnap.data() });
-                    });
-                    loadedLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
-                    appData.logs = loadedLogs;
-                    renderLogs();
-                }, (err) => console.error("Logs sync error:", err));
-
-                isInitialized = true;
-            } catch (err) {
-                console.error("Auth / Cloud init failed:", err);
-                showToast("雲端連線失敗，請檢查網路");
-            }
-        }
-
-        async function seedDefaultData() {
-            const user = auth.currentUser;
-            if (!user) return;
-
-            const defaultProducts = [
+        // 預設資料
+        const defaultData = {
+            products: [
                 {
                     id: 'p1',
                     code: 'INJ-A101',
@@ -703,156 +642,133 @@
                     runnerWeight: 5.2,
                     cycleTime: 20
                 }
-            ];
+            ],
+            sops: {
+                'p1': {
+                    tempNozzle: 215, tempZ1: 220, tempZ2: 215, tempZ3: 205, tempZ4: 195,
+                    tempMold: '55 / 50', dryTemp: 85, dryTime: 3,
+                    injP1: 75, injP2: 65, injP3: 50,
+                    injS1: 45, injS2: 60, injS3: 30,
+                    injPos1: 42, injPos2: 25, injPos3: 10,
+                    holdPressure: 45, holdTime: 3.5, vpSwitch: 10,
+                    meteringStroke: 58, suckBack: 3.0, backPressure: 8,
+                    coolingTime: 18, openStroke: 180, ejector: '40mm / 2次',
+                    notes: '1. 第一段慢速過澆口防噴痕，第二段快速充模。\n2. 表面不可有流痕或縮水。'
+                },
+                'p2': {
+                    tempNozzle: 200, tempZ1: 205, tempZ2: 200, tempZ3: 190, tempZ4: 180,
+                    tempMold: '40 / 40', dryTemp: 80, dryTime: 2,
+                    injP1: 65, injP2: 60, injP3: 45,
+                    injS1: 50, injS2: 65, injS3: 35,
+                    injPos1: 35, injPos2: 18, injPos3: 8,
+                    holdPressure: 40, holdTime: 2.5, vpSwitch: 8,
+                    meteringStroke: 45, suckBack: 2.5, backPressure: 6,
+                    coolingTime: 12, openStroke: 140, ejector: '30mm / 1次',
+                    notes: '注意頂出是否變形。'
+                }
+            },
+            logs: []
+        };
 
-            for (const p of defaultProducts) {
-                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', p.id), p);
-            }
+        window.appData = defaultData;
 
-            const defaultSop = {
-                tempNozzle: 215, tempZ1: 220, tempZ2: 215, tempZ3: 205, tempZ4: 195,
-                tempMold: '55 / 50', dryTemp: 85, dryTime: 3,
-                injP1: 75, injP2: 65, injP3: 50,
-                injS1: 45, injS2: 60, injS3: 30,
-                injPos1: 42, injPos2: 25, injPos3: 10,
-                holdPressure: 45, holdTime: 3.5, vpSwitch: 10,
-                meteringStroke: 58, suckBack: 3.0, backPressure: 8,
-                coolingTime: 18, openStroke: 180, ejector: '40mm / 2次',
-                notes: '1. 第一段慢速過澆口防噴痕，第二段快速充模。\n2. 表面不可有流痕或縮水。'
-            };
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sops', 'p1'), defaultSop);
+        // 初始化 Firebase
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            initCloudSync();
+        } catch (e) {
+            console.error("Firebase 初始化失敗，啟用本地保存模式", e);
+            updateStatusBadge(false);
+            loadLocalData();
         }
 
-        window.saveProduct = async function(e) {
-            e.preventDefault();
-            const user = auth.currentUser;
-            if (!user) {
-                showToast("尚未完成雲端驗證，請重新整理網頁");
-                return;
+        function updateStatusBadge(connected) {
+            const el = document.getElementById('sync-status-indicator');
+            if (connected) {
+                el.className = "inline-flex items-center text-xs font-semibold text-emerald-400";
+                el.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>雲端已連線 (即時同步)';
+            } else {
+                el.className = "inline-flex items-center text-xs font-semibold text-amber-400";
+                el.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 mr-1.5"></span>本機離線保存模式';
             }
+        }
 
-            const id = document.getElementById('prod-id').value || 'p' + Date.now();
-            const product = {
-                code: document.getElementById('prod-code').value.trim(),
-                name: document.getElementById('prod-name').value.trim(),
-                material: document.getElementById('prod-material').value.trim(),
-                cavities: parseInt(document.getElementById('prod-cavities').value, 10) || 1,
-                partWeight: parseFloat(document.getElementById('prod-part-weight').value) || 0,
-                runnerWeight: parseFloat(document.getElementById('prod-runner-weight').value) || 0,
-                cycleTime: parseFloat(document.getElementById('prod-cycle-time').value) || 10
-            };
+        // 雲端即時監聽與初始化
+        function initCloudSync() {
+            if (!db) return;
+            const docRef = doc(db, "factory_system", "main_data");
 
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id), product);
-            
-            const sopRef = doc(db, 'artifacts', appId, 'public', 'data', 'sops', id);
-            const sopSnap = await getDoc(sopRef);
-            if (!sopSnap.exists()) {
-                await setDoc(sopRef, {
-                    tempNozzle: 200, tempZ1: 205, tempZ2: 200, tempZ3: 190, tempZ4: 180,
-                    tempMold: '50 / 50', dryTemp: 80, dryTime: 3,
-                    injP1: 70, injP2: 60, injP3: 50,
-                    injS1: 50, injS2: 60, injS3: 40,
-                    injPos1: 40, injPos2: 20, injPos3: 8,
-                    holdPressure: 45, holdTime: 3.0, vpSwitch: 8,
-                    meteringStroke: 50, suckBack: 2.5, backPressure: 5,
-                    coolingTime: 15, openStroke: 150, ejector: '35mm / 1次',
-                    notes: ''
-                });
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const cloudData = docSnap.data();
+                    if (cloudData && cloudData.products) {
+                        window.appData = cloudData;
+                        persistLocal();
+                        refreshAllViews();
+                        isCloudConnected = true;
+                        updateStatusBadge(true);
+                    }
+                } else {
+                    // 如果雲端尚無資料，將預設資料初始化上傳
+                    saveToCloud(defaultData);
+                    isCloudConnected = true;
+                    updateStatusBadge(true);
+                }
+            }, (err) => {
+                console.warn("Firestore 即時監聽警告 (可能為權限設定)：", err);
+                isCloudConnected = false;
+                updateStatusBadge(false);
+                loadLocalData();
+            });
+        }
+
+        // 儲存資料（先存本機快取，再同步至雲端）
+        window.saveData = async function() {
+            persistLocal();
+            if (db) {
+                try {
+                    await setDoc(doc(db, "factory_system", "main_data"), window.appData);
+                    isCloudConnected = true;
+                    updateStatusBadge(true);
+                } catch (e) {
+                    console.error("寫入雲端失敗，請確認 Firebase Rules 規則是否已開放：", e);
+                    isCloudConnected = false;
+                    updateStatusBadge(false);
+                }
             }
-
-            closeProductModal();
-            showToast('產品資料已儲存至雲端');
         };
 
-        window.deleteProduct = async function(productId) {
-            const user = auth.currentUser;
-            if (!user) return;
-
-            if (appData.products.length <= 1) {
-                showToast('系統至少需保留一項產品資料');
-                return;
+        function persistLocal() {
+            try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(window.appData));
+            } catch (e) {
+                console.error("本地存檔失敗", e);
             }
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', productId));
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sops', productId));
-            showToast('產品已自雲端刪除');
+        }
+
+        function loadLocalData() {
+            try {
+                const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    if (parsed && parsed.products && parsed.products.length > 0) {
+                        window.appData = parsed;
+                    }
+                }
+            } catch (e) {
+                console.warn("讀取本機資料異常", e);
+            }
+            refreshAllViews();
+        }
+
+        window.onload = function() {
+            document.getElementById('log-date').value = new Date().toISOString().slice(0, 10);
+            refreshAllViews();
         };
-
-        window.saveSopData = async function() {
-            const user = auth.currentUser;
-            if (!user) return;
-
-            const prodId = document.getElementById('sop-product-select').value;
-            if (!prodId) return;
-
-            const sopData = {
-                tempNozzle: document.getElementById('sop-temp-nozzle').value,
-                tempZ1: document.getElementById('sop-temp-z1').value,
-                tempZ2: document.getElementById('sop-temp-z2').value,
-                tempZ3: document.getElementById('sop-temp-z3').value,
-                tempZ4: document.getElementById('sop-temp-z4').value,
-                tempMold: document.getElementById('sop-temp-mold').value,
-                dryTemp: document.getElementById('sop-dry-temp').value,
-                dryTime: document.getElementById('sop-dry-time').value,
-                injP1: document.getElementById('sop-inj-p1').value,
-                injP2: document.getElementById('sop-inj-p2').value,
-                injP3: document.getElementById('sop-inj-p3').value,
-                injS1: document.getElementById('sop-inj-s1').value,
-                injS2: document.getElementById('sop-inj-s2').value,
-                injS3: document.getElementById('sop-inj-s3').value,
-                injPos1: document.getElementById('sop-inj-pos1').value,
-                injPos2: document.getElementById('sop-inj-pos2').value,
-                injPos3: document.getElementById('sop-inj-pos3').value,
-                holdPressure: document.getElementById('sop-hold-pressure').value,
-                holdTime: document.getElementById('sop-hold-time').value,
-                vpSwitch: document.getElementById('sop-vp-switch').value,
-                meteringStroke: document.getElementById('sop-metering-stroke').value,
-                suckBack: document.getElementById('sop-suck-back').value,
-                backPressure: document.getElementById('sop-back-pressure').value,
-                coolingTime: document.getElementById('sop-cooling-time').value,
-                openStroke: document.getElementById('sop-open-stroke').value,
-                ejector: document.getElementById('sop-ejector').value,
-                notes: document.getElementById('sop-notes').value
-            };
-
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sops', prodId), sopData);
-            showToast('成型條件表 (SOP) 已同步至雲端！');
-        };
-
-        window.addProductionLog = async function(e) {
-            e.preventDefault();
-            const user = auth.currentUser;
-            if (!user) return;
-
-            const logId = 'l' + Date.now();
-            const newLog = {
-                date: document.getElementById('log-date').value,
-                machine: document.getElementById('log-machine').value.trim(),
-                productId: document.getElementById('log-product-select').value,
-                hours: parseFloat(document.getElementById('log-hours').value) || 0,
-                goodQty: parseInt(document.getElementById('log-good-qty').value, 10) || 0,
-                ngQty: parseInt(document.getElementById('log-ng-qty').value, 10) || 0,
-                reason: document.getElementById('log-reason').value.trim()
-            };
-
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId), newLog);
-            document.getElementById('log-good-qty').value = '';
-            document.getElementById('log-ng-qty').value = '0';
-            document.getElementById('log-reason').value = '';
-            showToast('生產紀錄已即時上傳雲端');
-        };
-
-        window.deleteLog = async function(logId) {
-            const user = auth.currentUser;
-            if (!user) return;
-
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId));
-            showToast('生產紀錄已刪除');
-        };
-
-        initCloudSync();
     </script>
 
-    <!-- UI 互動邏輯 -->
+    <!-- 介面操作與計算邏輯 -->
     <script>
         function showToast(message) {
             const toast = document.getElementById('toast-msg');
@@ -881,7 +797,7 @@
             const tbody = document.getElementById('product-table-body');
             tbody.innerHTML = '';
 
-            appData.products.forEach(p => {
+            window.appData.products.forEach(p => {
                 const totalShotWeight = (p.partWeight * p.cavities + p.runnerWeight).toFixed(1);
                 const hourlyOutput = Math.floor((3600 / p.cycleTime) * p.cavities);
 
@@ -927,13 +843,13 @@
                 const selectEl = document.getElementById(selectId);
                 const currentVal = selectEl.value;
                 selectEl.innerHTML = '';
-                appData.products.forEach(p => {
+                window.appData.products.forEach(p => {
                     const opt = document.createElement('option');
                     opt.value = p.id;
                     opt.textContent = `[${p.code}] ${p.name} (${p.cavities}穴 / ${p.cycleTime}s)`;
                     selectEl.appendChild(opt);
                 });
-                if (currentVal && appData.products.some(p => p.id === currentVal)) {
+                if (currentVal && window.appData.products.some(p => p.id === currentVal)) {
                     selectEl.value = currentVal;
                 }
             });
@@ -946,7 +862,7 @@
             const modal = document.getElementById('product-modal');
             const title = document.getElementById('modal-title');
             if (productId) {
-                const p = appData.products.find(x => x.id === productId);
+                const p = window.appData.products.find(x => x.id === productId);
                 if (!p) return;
                 title.textContent = '編輯產品與模具規格';
                 document.getElementById('prod-id').value = p.id;
@@ -969,6 +885,60 @@
             document.getElementById('product-modal').classList.add('hidden');
         }
 
+        async function saveProduct(e) {
+            e.preventDefault();
+            const editId = document.getElementById('prod-id').value;
+            const id = editId || 'p_' + Date.now();
+            
+            const product = {
+                id: id,
+                code: document.getElementById('prod-code').value.trim(),
+                name: document.getElementById('prod-name').value.trim(),
+                material: document.getElementById('prod-material').value.trim(),
+                cavities: parseInt(document.getElementById('prod-cavities').value, 10) || 1,
+                partWeight: parseFloat(document.getElementById('prod-part-weight').value) || 0,
+                runnerWeight: parseFloat(document.getElementById('prod-runner-weight').value) || 0,
+                cycleTime: parseFloat(document.getElementById('prod-cycle-time').value) || 10
+            };
+
+            const existingIndex = window.appData.products.findIndex(p => p.id === id);
+            if (existingIndex >= 0) {
+                window.appData.products[existingIndex] = product;
+            } else {
+                window.appData.products.push(product);
+                if (!window.appData.sops[id]) {
+                    window.appData.sops[id] = {
+                        tempNozzle: 205, tempZ1: 210, tempZ2: 205, tempZ3: 195, tempZ4: 185,
+                        tempMold: '50 / 50', dryTemp: 80, dryTime: 3,
+                        injP1: 70, injP2: 60, injP3: 45,
+                        injS1: 50, injS2: 60, injS3: 35,
+                        injPos1: 40, injPos2: 20, injPos3: 8,
+                        holdPressure: 40, holdTime: 3.0, vpSwitch: 8,
+                        meteringStroke: 50, suckBack: 2.5, backPressure: 6,
+                        coolingTime: 15, openStroke: 150, ejector: '35mm / 1次',
+                        notes: ''
+                    };
+                }
+            }
+
+            await window.saveData();
+            refreshAllViews();
+            closeProductModal();
+            showToast('產品資料已儲存並同步至雲端！');
+        }
+
+        async function deleteProduct(productId) {
+            if (window.appData.products.length <= 1) {
+                showToast('系統至少需保留一項產品資料');
+                return;
+            }
+            window.appData.products = window.appData.products.filter(p => p.id !== productId);
+            delete window.appData.sops[productId];
+            await window.saveData();
+            refreshAllViews();
+            showToast('產品資料已刪除並同步');
+        }
+
         function viewProductSop(productId) {
             switchTab('tab-sop');
             document.getElementById('sop-product-select').value = productId;
@@ -977,7 +947,7 @@
 
         function loadSopForSelectedProduct() {
             const prodId = document.getElementById('sop-product-select').value;
-            const product = appData.products.find(x => x.id === prodId);
+            const product = window.appData.products.find(x => x.id === prodId);
             if (!product) return;
 
             document.getElementById('sop-card-partno').textContent = product.code;
@@ -987,7 +957,7 @@
             document.getElementById('sop-card-cycletime').textContent = product.cycleTime;
             document.getElementById('sop-card-weights').textContent = `單件 ${product.partWeight}g / 料頭 ${product.runnerWeight}g`;
 
-            const sop = appData.sops[prodId] || {};
+            const sop = window.appData.sops[prodId] || {};
             const fields = {
                 'sop-temp-nozzle': sop.tempNozzle ?? '',
                 'sop-temp-z1': sop.tempZ1 ?? '',
@@ -1024,10 +994,48 @@
             });
         }
 
+        async function saveSopData() {
+            const prodId = document.getElementById('sop-product-select').value;
+            if (!prodId) return;
+
+            window.appData.sops[prodId] = {
+                tempNozzle: document.getElementById('sop-temp-nozzle').value,
+                tempZ1: document.getElementById('sop-temp-z1').value,
+                tempZ2: document.getElementById('sop-temp-z2').value,
+                tempZ3: document.getElementById('sop-temp-z3').value,
+                tempZ4: document.getElementById('sop-temp-z4').value,
+                tempMold: document.getElementById('sop-temp-mold').value,
+                dryTemp: document.getElementById('sop-dry-temp').value,
+                dryTime: document.getElementById('sop-dry-time').value,
+                injP1: document.getElementById('sop-inj-p1').value,
+                injP2: document.getElementById('sop-inj-p2').value,
+                injP3: document.getElementById('sop-inj-p3').value,
+                injS1: document.getElementById('sop-inj-s1').value,
+                injS2: document.getElementById('sop-inj-s2').value,
+                injS3: document.getElementById('sop-inj-s3').value,
+                injPos1: document.getElementById('sop-inj-pos1').value,
+                injPos2: document.getElementById('sop-inj-pos2').value,
+                injPos3: document.getElementById('sop-inj-pos3').value,
+                holdPressure: document.getElementById('sop-hold-pressure').value,
+                holdTime: document.getElementById('sop-hold-time').value,
+                vpSwitch: document.getElementById('sop-vp-switch').value,
+                meteringStroke: document.getElementById('sop-metering-stroke').value,
+                suckBack: document.getElementById('sop-suck-back').value,
+                backPressure: document.getElementById('sop-back-pressure').value,
+                coolingTime: document.getElementById('sop-cooling-time').value,
+                openStroke: document.getElementById('sop-open-stroke').value,
+                ejector: document.getElementById('sop-ejector').value,
+                notes: document.getElementById('sop-notes').value
+            };
+
+            await window.saveData();
+            showToast('成型條件 SOP 已同步更新至雲端！');
+        }
+
         function updateLogStandardPreview() {
             const prodId = document.getElementById('log-product-select').value;
             const hours = parseFloat(document.getElementById('log-hours').value) || 0;
-            const product = appData.products.find(x => x.id === prodId);
+            const product = window.appData.products.find(x => x.id === prodId);
 
             if (!product || hours <= 0) {
                 document.getElementById('log-std-preview').textContent = '-- pcs';
@@ -1038,6 +1046,36 @@
             document.getElementById('log-std-preview').textContent = stdQty.toLocaleString() + ' pcs';
         }
 
+        async function addProductionLog(e) {
+            e.preventDefault();
+            const newLog = {
+                id: 'log_' + Date.now(),
+                date: document.getElementById('log-date').value,
+                machine: document.getElementById('log-machine').value.trim(),
+                productId: document.getElementById('log-product-select').value,
+                hours: parseFloat(document.getElementById('log-hours').value) || 0,
+                goodQty: parseInt(document.getElementById('log-good-qty').value, 10) || 0,
+                ngQty: parseInt(document.getElementById('log-ng-qty').value, 10) || 0,
+                reason: document.getElementById('log-reason').value.trim()
+            };
+
+            window.appData.logs.unshift(newLog);
+            await window.saveData();
+            renderLogs();
+
+            document.getElementById('log-good-qty').value = '';
+            document.getElementById('log-ng-qty').value = '0';
+            document.getElementById('log-reason').value = '';
+            showToast('生產日報已新增並同步至雲端');
+        }
+
+        async function deleteLog(logId) {
+            window.appData.logs = window.appData.logs.filter(l => l.id !== logId);
+            await window.saveData();
+            renderLogs();
+            showToast('紀錄已刪除並同步');
+        }
+
         function renderLogs() {
             const tbody = document.getElementById('log-table-body');
             tbody.innerHTML = '';
@@ -1045,8 +1083,8 @@
             let totalGood = 0;
             let totalNg = 0;
 
-            appData.logs.forEach(log => {
-                const product = appData.products.find(x => x.id === log.productId);
+            window.appData.logs.forEach(log => {
+                const product = window.appData.products.find(x => x.id === log.productId);
                 const prodName = product ? `${product.name} (${product.code})` : '已刪除產品';
                 const stdQty = product ? Math.round((3600 / product.cycleTime) * product.cavities * log.hours) : 0;
 
@@ -1090,7 +1128,7 @@
 
         function runScheduleCalc() {
             const prodId = document.getElementById('calc-product-select').value;
-            const product = appData.products.find(x => x.id === prodId);
+            const product = window.appData.products.find(x => x.id === prodId);
             if (!product) return;
 
             const orderQty = parseInt(document.getElementById('calc-order-qty').value, 10) || 0;
@@ -1113,7 +1151,7 @@
             const bags25kg = Math.ceil(totalMatWithLossKg / 25);
 
             document.getElementById('res-hourly-output').innerHTML = `${Math.floor(hourlyOutput).toLocaleString()} <span class="text-sm font-normal text-slate-500">pcs / hr</span>`;
-            document.getElementById('res-Shots-per-hr').textContent = `每小時約射出 ${Math.floor(shotsPerHour)} 模次 (共需 ${totalShotsNeeded.toLocaleString()} 模次)`;
+            document.getElementById('res-shots-per-hr').textContent = `每小時約射出 ${Math.floor(shotsPerHour)} 模次 (共需 ${totalShotsNeeded.toLocaleString()} 模次)`;
 
             document.getElementById('res-total-hours').innerHTML = `${totalHoursNeeded.toFixed(1)} <span class="text-sm font-normal text-slate-500">小時</span>`;
             document.getElementById('res-total-days').textContent = `以每日開機 ${dailyHours} 小時計算，約需 ${totalDaysNeeded.toFixed(1)} 個工作天`;
@@ -1126,7 +1164,7 @@
         }
 
         function exportData() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData, null, 2));
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.appData, null, 2));
             const downloadAnchor = document.createElement('a');
             const today = new Date().toISOString().slice(0, 10);
             downloadAnchor.setAttribute("href", dataStr);
@@ -1137,6 +1175,30 @@
             showToast('已匯出系統備份檔 (JSON)');
         }
 
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (imported && imported.products && Array.isArray(imported.products)) {
+                        window.appData = imported;
+                        await window.saveData();
+                        refreshAllViews();
+                        showToast('備份資料已成功匯入並同步至雲端！');
+                    } else {
+                        showToast('檔案格式不正確');
+                    }
+                } catch (err) {
+                    showToast('讀取失敗：不是有效的 JSON 檔案');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
         function refreshAllViews() {
             renderProducts();
             loadSopForSelectedProduct();
@@ -1144,10 +1206,6 @@
             renderLogs();
             runScheduleCalc();
         }
-
-        window.onload = function() {
-            document.getElementById('log-date').value = new Date().toISOString().slice(0, 10);
-        };
     </script>
 </body>
 </html>
