@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>老婆大人任務派發中心 💕</title>
+
+  <!-- PWA 手機加入主畫面支援 -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="夫妻任務板" />
+  <meta name="theme-color" content="#fff1f2" />
+
+  <!-- Google Fonts: Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Noto Sans TC"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <!-- Canvas Confetti 慶祝撒花特效 -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      background-color: #FFFDF9;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    @keyframes pulse-border {
+      0%, 100% { border-color: #fb7185; box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.25); }
+      50% { border-color: #e11d48; box-shadow: 0 0 0 6px rgba(244, 63, 94, 0); }
+    }
+    .urgent-card {
+      animation: pulse-border 2s infinite;
+    }
+  </style>
+</head>
+<body class="text-slate-800 pb-28 selection:bg-rose-200">
+
+  <!-- 頂部浮動通知 Toast -->
+  <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md pointer-events-none hidden">
+    <div id="toast-box" class="px-4 py-3 rounded-2xl shadow-xl border flex items-center gap-3 bg-slate-900 border-slate-700 text-white transition-all duration-300">
+      <span id="toast-icon" class="text-amber-400 text-lg">✨</span>
+      <span id="toast-text" class="text-sm font-medium leading-snug">通知訊息</span>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       頂部狀態列與角色切換器 (Header)
+  ========================================== -->
+  <header id="app-header" class="sticky top-0 z-30 backdrop-blur-md bg-rose-50/90 border-b border-rose-200/80 transition-colors duration-300">
+    <div class="max-w-lg mx-auto px-4 pt-3 pb-3">
+      <!-- 第一排：標題、即時連線燈號、部署教學按鈕 -->
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2.5">
+          <div id="brand-icon" class="w-10 h-10 rounded-2xl bg-rose-500 text-white flex items-center justify-center shadow-sm transition-colors">
+            <i class="fa-solid fa-heart text-lg"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <h1 class="font-black text-base leading-tight text-slate-900">老婆大人任務派發中心</h1>
+              <span id="sync-badge" class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                <span id="sync-dot" class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                <span id="sync-text">連線中...</span>
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-0.5">雲端同步專案：<span class="font-mono font-semibold text-slate-600">sunghsing</span> (專屬隔離區)</p>
+          </div>
+        </div>
+
+        <button onclick="window.app.openModal('guide-modal')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 shadow-sm text-xs font-bold transition active:scale-95">
+          <i class="fa-solid fa-mobile-screen-button text-rose-500"></i>
+          <span>雙機教學</span>
+        </button>
+      </div>
+
+      <!-- 第二排：身分切換器 + 積分顯示卡 -->
+      <div class="grid grid-cols-12 gap-2 items-center">
+        <!-- 身分切換膠囊 -->
+        <div class="col-span-7 bg-white/90 p-1 rounded-2xl border border-slate-200/80 flex shadow-inner">
+          <button id="btn-role-wife" onclick="window.app.setRole('wife')" class="flex-1 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-rose-500 text-white shadow-sm">
+            <span>👩🏻 老婆派單</span>
+            <span id="badge-wife-review" class="hidden px-1.5 py-0.2 rounded-full text-[10px] bg-white text-rose-600 font-black">0</span>
+          </button>
+          <button id="btn-role-husband" onclick="window.app.setRole('husband')" class="flex-1 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all text-slate-600 hover:text-slate-900">
+            <span>👨🏻 老公接單</span>
+            <span id="badge-husband-todo" class="hidden px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-600 text-white font-black">0</span>
+          </button>
+        </div>
+
+        <!-- 好老公積分卡 -->
+        <div onclick="window.app.openPointsAdjustModal()" class="col-span-5 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-1.5 rounded-2xl shadow-sm flex items-center justify-between cursor-pointer active:scale-95 transition" title="點擊可手動調整積分">
+          <div>
+            <div class="text-[10px] font-bold text-amber-100 leading-none flex items-center gap-1">
+              <span>好老公積分</span>
+              <i class="fa-solid fa-pen text-[8px] opacity-75"></i>
+            </div>
+            <div class="text-lg font-black tracking-tight flex items-baseline gap-0.5 mt-0.5">
+              <span id="header-points">0</span>
+              <span class="text-[10px] font-normal">pt</span>
+            </div>
+          </div>
+          <div class="bg-white/20 w-8 h-8 rounded-xl flex items-center justify-center">
+            <i class="fa-solid fa-award text-white text-sm"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==========================================
+       主內容容器 (Main Content)
+  ========================================== -->
+  <main class="max-w-lg mx-auto px-4 pt-4 space-y-5">
+
+    <!-- 資料庫權限錯誤提示橫幅 (若發生 Permission Denied 時顯示) -->
+    <div id="db-error-banner" class="hidden bg-red-50 border-2 border-red-300 rounded-3xl p-4 text-xs text-red-900 space-y-2">
+      <div class="font-bold text-sm flex items-center gap-2 text-red-700">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>Firebase 資料庫讀寫權限提醒</span>
+      </div>
+      <p>目前已自動切換為「本機暫存模式」。若要讓兩支手機即時同步，請確認你的 <code class="bg-red-100 px-1 py-0.5 rounded font-mono">sunghsing</code> Realtime Database 規則（Rules）允許讀寫 <code class="bg-red-100 px-1 py-0.5 rounded font-mono">couple_task_board</code> 節點。</p>
+    </div>
+
+    <!-- 空資料庫時的一鍵載入預設資料提示卡 -->
+    <div id="empty-init-card" class="hidden bg-gradient-to-br from-rose-50 via-white to-amber-50 border-2 border-dashed border-rose-300 rounded-3xl p-6 text-center shadow-sm">
+      <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-3 text-xl">
+        <i class="fa-solid fa-wand-magic-sparkles"></i>
+      </div>
+      <h2 class="text-base font-black text-slate-800 mb-1">歡迎啟用夫妻專屬任務板！</h2>
+      <p class="text-xs text-slate-600 mb-4 leading-relaxed">
+        目前 <code class="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded">/couple_task_board</code> 裡面還是空的，點一下按鈕立即載入預設的「日常任務」與「老公福利商城」！
+      </p>
+      <button onclick="window.app.loadSampleData()" class="px-5 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm shadow-md shadow-rose-200 transition active:scale-95 inline-flex items-center gap-2">
+        <i class="fa-solid fa-bolt"></i>
+        <span>✨ 一鍵載入預設任務與獎勵</span>
+      </button>
+    </div>
+
+    <!-- ==========================================
+         分頁一：任務大廳 (Tasks Section)
+    ========================================== -->
+    <div id="tab-tasks" class="space-y-4">
+
+      <!-- 老婆專屬：一鍵秒派常用任務區 -->
+      <section id="wife-dispatch-panel" class="bg-white rounded-3xl p-4 border border-rose-100 shadow-sm">
+        <div class="flex items-center justify-between mb-2.5">
+          <div class="flex items-center gap-1.5">
+            <span class="text-rose-500">⚡</span>
+            <h2 class="text-sm font-black text-slate-800">老婆大人・常用任務一鍵秒派</h2>
+          </div>
+          <span class="text-[11px] text-slate-400">點一下立即推播給老公</span>
+        </div>
+
+        <!-- 快捷任務橫向捲軸 -->
+        <div id="quick-tasks-list" class="flex gap-2.5 overflow-x-auto pb-2 no-scrollbar">
+          <!-- 由 JS 動態渲染 -->
+        </div>
+
+        <button onclick="window.app.openModal('new-task-modal')" class="mt-2.5 w-full py-3 rounded-2xl bg-rose-500 hover:bg-rose-600 active:scale-98 text-white font-bold text-sm shadow-md shadow-rose-200/80 flex items-center justify-center gap-2 transition">
+          <i class="fa-solid fa-plus"></i>
+          <span>撰寫自訂新任務派給老公</span>
+        </button>
+      </section>
+
+      <!-- 老公專屬：今日戰況激勵橫幅 -->
+      <section id="husband-status-banner" class="hidden bg-gradient-to-r from-indigo-600 to-blue-600 rounded-3xl p-4 text-white shadow-md">
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="inline-block text-[11px] font-bold bg-white/20 px-2.5 py-0.5 rounded-full mb-1">
+              👨🏻 神隊友接單模式
+            </span>
+            <h2 id="husband-banner-title" class="text-base font-black">準備好接單賺積分了嗎？</h2>
+            <p class="text-xs text-indigo-100 mt-0.5">完成任務回報驗收，累積積分兌換專屬福利券！</p>
+          </div>
+          <div class="text-right bg-white/15 px-3.5 py-2 rounded-2xl backdrop-blur-sm shrink-0">
+            <div class="text-[11px] text-indigo-100">累積完成</div>
+            <div class="text-xl font-black"><span id="stat-completed-total">0</span> <span class="text-xs font-normal">件</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 老婆視角：待驗收任務醒目提醒區 -->
+      <div id="wife-review-alert" class="hidden bg-amber-50 border-2 border-amber-300 rounded-2xl p-3.5 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 animate-bounce">
+            <i class="fa-solid fa-clipboard-check"></i>
+          </div>
+          <div>
+            <h3 class="text-xs font-black text-amber-900">
+              老公已完成 <span id="alert-review-count">0</span> 件任務，請老婆大人驗收！
+            </h3>
+            <p class="text-[11px] text-amber-700">點擊卡片上的「✅ 驗收通過」即可自動發放積分</p>
+          </div>
+        </div>
+        <button onclick="window.app.setTaskFilter('submitted')" class="px-3 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-xl shrink-0 hover:bg-amber-600 transition">
+          看驗收
+        </button>
+      </div>
+
+      <!-- 狀態篩選與分類標籤列 -->
+      <div class="space-y-2.5">
+        <div class="flex bg-slate-100 p-1 rounded-2xl border border-slate-200/70">
+          <button id="filter-btn-active" onclick="window.app.setTaskFilter('active')" class="flex-1 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 bg-white text-slate-900 shadow-sm">
+            <span>進行中</span>
+            <span id="count-active" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-white">0</span>
+          </button>
+          <button id="filter-btn-pending" onclick="window.app.setTaskFilter('pending')" class="flex-1 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 text-slate-500">
+            <span>待完成</span>
+            <span id="count-pending" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-600">0</span>
+          </button>
+          <button id="filter-btn-submitted" onclick="window.app.setTaskFilter('submitted')" class="flex-1 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 text-slate-500">
+            <span>待驗收</span>
+            <span id="count-submitted" class="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-200 text-amber-800">0</span>
+          </button>
+          <button id="filter-btn-completed" onclick="window.app.setTaskFilter('completed')" class="flex-1 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 text-slate-500">
+            <span>已結案</span>
+            <span id="count-completed" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-600">0</span>
+          </button>
+        </div>
+
+        <!-- 分類橫向篩選 -->
+        <div id="category-filter-bar" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+          <!-- 由 JS 渲染 -->
+        </div>
+      </div>
+
+      <!-- 任務卡片列表容器 -->
+      <div id="tasks-list-container" class="space-y-3">
+        <!-- 由 JS 動態渲染 -->
+      </div>
+    </div>
+
+    <!-- ==========================================
+         分頁二：積分福利社 & 票夾 (Rewards Section)
+    ========================================== -->
+    <div id="tab-rewards" class="hidden space-y-5">
+
+      <!-- 積分商城頂部橫幅 -->
+      <div class="bg-gradient-to-br from-amber-500 via-orange-500 to-rose-500 rounded-3xl p-5 text-white shadow-md relative overflow-hidden">
+        <div class="relative z-10 flex items-center justify-between">
+          <div>
+            <span class="text-xs font-bold bg-white/20 px-2.5 py-0.5 rounded-full">
+              🎁 好老公積分福利社
+            </span>
+            <div class="mt-2 flex items-baseline gap-1.5">
+              <span id="shop-points-display" class="text-3xl font-black tracking-tight">0</span>
+              <span class="text-sm font-bold text-amber-100">可用積分 (pt)</span>
+            </div>
+            <p id="shop-role-hint" class="text-xs text-amber-50 mt-1">
+              老婆可自由上架獎勵，犒賞表現優異的神隊友老公！
+            </p>
+          </div>
+          <div class="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0 text-2xl">
+            🎉
+          </div>
+        </div>
+
+        <div id="wife-add-reward-btn-wrap" class="mt-4">
+          <button onclick="window.app.openModal('new-reward-modal')" class="w-full py-2.5 rounded-2xl bg-white text-rose-600 font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 hover:bg-rose-50 transition active:scale-98">
+            <i class="fa-solid fa-plus"></i>
+            <span>新增老公專屬福利項目</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 🎟️ 我的福利券票夾 -->
+      <section class="bg-white rounded-3xl p-4 border border-amber-200 shadow-sm space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-black text-slate-800 flex items-center gap-1.5">
+            <span>🎟️</span>
+            <span>我的福利券票夾 (已兌換)</span>
+          </h3>
+          <span id="unused-vouchers-badge" class="text-[11px] font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full">
+            可使用 0 張
+          </span>
+        </div>
+
+        <div id="vouchers-list-container" class="space-y-2">
+          <!-- 由 JS 動態渲染 -->
+        </div>
+      </section>
+
+      <!-- 可兌換獎勵列表 -->
+      <div class="space-y-2.5">
+        <h3 class="text-sm font-black text-slate-800 px-1">🛍️ 點擊兌換福利券</h3>
+        <div id="rewards-list-container" class="grid grid-cols-1 gap-3">
+          <!-- 由 JS 動態渲染 -->
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ==========================================
+       底部手機導覽列 (Bottom Navigation Bar)
+  ========================================== -->
+  <nav class="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200/80">
+    <div class="max-w-lg mx-auto px-6 py-2 flex items-center justify-around">
+      <button id="nav-btn-tasks" onclick="window.app.switchTab('tasks')" class="flex flex-col items-center py-1 px-4 rounded-2xl transition text-rose-600 font-bold">
+        <div class="relative">
+          <i class="fa-solid fa-list-check text-lg"></i>
+          <span id="nav-badge-tasks" class="hidden absolute -top-1.5 -right-3 bg-rose-500 text-white text-[10px] font-black px-1.5 rounded-full">0</span>
+        </div>
+        <span class="text-[11px] mt-0.5">任務派發板</span>
+      </button>
+
+      <!-- 中央快速派單圓鈕 -->
+      <button id="fab-add-task" onclick="window.app.openModal('new-task-modal')" class="-mt-6 bg-rose-500 hover:bg-rose-600 active:scale-95 text-white w-14 h-14 rounded-full shadow-lg shadow-rose-200 border-4 border-[#FFFDF9] flex items-center justify-center transition" title="派發新任務">
+        <i class="fa-solid fa-plus text-xl"></i>
+      </button>
+
+      <button id="nav-btn-rewards" onclick="window.app.switchTab('rewards')" class="flex flex-col items-center py-1 px-4 rounded-2xl transition text-slate-400 hover:text-slate-600">
+        <div class="relative">
+          <i class="fa-solid fa-gift text-lg"></i>
+          <span id="nav-badge-vouchers" class="hidden absolute -top-1.5 -right-3 bg-amber-500 text-white text-[10px] font-black px-1.5 rounded-full">0</span>
+        </div>
+        <span class="text-[11px] mt-0.5">積分福利社</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ==========================================
+       Modal 1: 新增自訂任務視窗
+  ========================================== -->
+  <div id="new-task-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+          <span class="w-7 h-7 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-bullhorn"></i>
+          </span>
+          <span>派發新任務給老公</span>
+        </h3>
+        <button onclick="window.app.closeModal('new-task-modal')" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="form-new-task" onsubmit="window.app.submitNewTask(event)" class="space-y-3.5">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">任務名稱 *</label>
+          <input id="input-task-title" type="text" required placeholder="例如：去全聯買鮮奶、幫小孩洗澡、收衣服..." class="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">任務分類</label>
+            <select id="input-task-category" class="w-full px-3 py-2.5 rounded-2xl border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-500">
+              <option value="家務">🏠 家務</option>
+              <option value="採買">🛒 採買</option>
+              <option value="育兒">👶🏻 育兒</option>
+              <option value="跑腿">📦 跑腿</option>
+              <option value="專屬服務">💆🏻‍♀️ 專屬服務</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">緊急程度</label>
+            <input type="hidden" id="input-task-urgency" value="normal" />
+            <div class="flex bg-slate-100 p-1 rounded-2xl">
+              <button type="button" id="btn-urg-normal" onclick="window.app.selectUrgency('normal')" class="flex-1 py-1.5 rounded-xl text-xs font-bold transition bg-white text-slate-800 shadow-xs">
+                一般
+              </button>
+              <button type="button" id="btn-urg-urgent" onclick="window.app.selectUrgency('urgent')" class="flex-1 py-1.5 rounded-xl text-xs font-bold transition text-slate-500">
+                🔥 急件置頂
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">完成獎勵積分 (pt)</label>
+          <div class="grid grid-cols-5 gap-1.5 mb-2">
+            <button type="button" onclick="window.app.selectPoints(10)" class="pt-preset py-1.5 rounded-xl text-xs font-bold border bg-amber-50 text-amber-800 border-amber-200">+10</button>
+            <button type="button" onclick="window.app.selectPoints(20)" class="pt-preset py-1.5 rounded-xl text-xs font-bold border bg-amber-500 text-white border-amber-500">+20</button>
+            <button type="button" onclick="window.app.selectPoints(30)" class="pt-preset py-1.5 rounded-xl text-xs font-bold border bg-amber-50 text-amber-800 border-amber-200">+30</button>
+            <button type="button" onclick="window.app.selectPoints(50)" class="pt-preset py-1.5 rounded-xl text-xs font-bold border bg-amber-50 text-amber-800 border-amber-200">+50</button>
+            <button type="button" onclick="window.app.selectPoints(100)" class="pt-preset py-1.5 rounded-xl text-xs font-bold border bg-amber-50 text-amber-800 border-amber-200">+100</button>
+          </div>
+          <input id="input-task-points" type="number" min="1" max="9999" value="20" class="w-full px-3.5 py-2 rounded-2xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">老婆溫馨叮嚀 / 備註</label>
+          <textarea id="input-task-note" rows="2" placeholder="補充細節，例如品牌、數量或注意事項..." class="w-full px-3.5 py-2 rounded-2xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"></textarea>
+        </div>
+
+        <button type="submit" class="w-full py-3 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm shadow-md shadow-rose-200 transition active:scale-98">
+          立即派發任務 🚀
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       Modal 2: 老公提交完成回報視窗
+  ========================================== -->
+  <div id="submit-review-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+          <span>🙋🏻‍♂️</span>
+          <span>回報任務完成・送交老婆驗收</span>
+        </h3>
+        <button onclick="window.app.closeModal('submit-review-modal')" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div id="review-modal-task-title" class="text-sm font-bold text-indigo-700 bg-indigo-50 px-3.5 py-2.5 rounded-2xl border border-indigo-100"></div>
+
+      <form onsubmit="window.app.confirmSubmitTaskReview(event)" class="space-y-3.5">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">給老婆大人的完成回報留言：</label>
+          <input id="input-husband-note" type="text" placeholder="做好囉！請老婆大人驗收 ❤️" class="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <div class="flex flex-wrap gap-1.5 mt-2">
+            <button type="button" onclick="document.getElementById('input-husband-note').value='任務搞定！請老婆大人驗收 ❤️'" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-full">任務搞定！請驗收 ❤️</button>
+            <button type="button" onclick="document.getElementById('input-husband-note').value='買回來放冰箱囉！🧊'" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-full">買回來放冰箱囉！🧊</button>
+            <button type="button" onclick="document.getElementById('input-husband-note').value='打掃得亮晶晶✨請檢查！'" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-full">打掃得亮晶晶✨</button>
+          </div>
+        </div>
+
+        <button type="submit" class="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-200 transition active:scale-98">
+          送出回報並申請驗收 ✨
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       Modal 3: 新增獎勵項目視窗
+  ========================================== -->
+  <div id="new-reward-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-black text-slate-900">🎁 新增老公專屬福利</h3>
+        <button onclick="window.app.closeModal('new-reward-modal')" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form onsubmit="window.app.submitNewReward(event)" class="space-y-3.5">
+        <div class="grid grid-cols-4 gap-2">
+          <div class="col-span-1">
+            <label class="block text-xs font-bold text-slate-700 mb-1">圖示</label>
+            <select id="input-reward-icon" class="w-full px-2 py-2.5 rounded-2xl border border-slate-200 text-lg text-center bg-white">
+              <option value="🎮">🎮</option>
+              <option value="🛡️">🛡️</option>
+              <option value="🧋">🧋</option>
+              <option value="💤">💤</option>
+              <option value="💆🏻‍♂️">💆🏻‍♂️</option>
+              <option value="🍺">🍺</option>
+              <option value="🎁">🎁</option>
+              <option value="💰">💰</option>
+            </select>
+          </div>
+          <div class="col-span-3">
+            <label class="block text-xs font-bold text-slate-700 mb-1">福利名稱 *</label>
+            <input id="input-reward-title" type="text" required placeholder="例如：放風打電動 2 小時" class="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-sm" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">兌換所需積分 (pt)</label>
+          <input id="input-reward-cost" type="number" min="10" max="9999" value="100" required class="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-sm" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">福利內容說明</label>
+          <input id="input-reward-desc" type="text" placeholder="例如：老婆保證不碎念、不打擾！" class="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-sm" />
+        </div>
+
+        <button type="submit" class="w-full py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-md">
+          確認上架福利 🎁
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       Modal 4: 手動調整積分視窗
+  ========================================== -->
+  <div id="adjust-points-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div class="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-black text-slate-900">🏆 調整好老公積分</h3>
+        <button onclick="window.app.closeModal('adjust-points-modal')" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500">老婆大人可以直接給予額外加分獎勵，或手動修正目前總積分：</p>
+      <form onsubmit="window.app.saveAdjustedPoints(event)" class="space-y-3">
+        <input id="input-adjust-points" type="number" class="w-full px-4 py-3 rounded-2xl border border-slate-200 text-xl font-black text-center text-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" onclick="window.app.quickAddPoints(10)" class="py-2 rounded-xl bg-amber-50 text-amber-800 font-bold text-xs border border-amber-200">+10 分</button>
+          <button type="button" onclick="window.app.quickAddPoints(50)" class="py-2 rounded-xl bg-amber-50 text-amber-800 font-bold text-xs border border-amber-200">+50 分</button>
+          <button type="button" onclick="window.app.quickAddPoints(-20)" class="py-2 rounded-xl bg-rose-50 text-rose-700 font-bold text-xs border border-rose-200">-20 分</button>
+        </div>
+        <button type="submit" class="w-full py-2.5 rounded-2xl bg-slate-900 text-white font-bold text-xs">儲存積分變更</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       Modal 5: 雙機同步與部署教學視窗
+  ========================================== -->
+  <div id="guide-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div class="bg-white w-full max-w-md rounded-3xl p-5 shadow-2xl max-h-[85vh] overflow-y-auto space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-cloud-arrow-up text-rose-500"></i>
+          <h3 class="text-base font-black text-slate-900">雙機連線 & 加入手機主畫面</h3>
+        </div>
+        <button onclick="window.app.closeModal('guide-modal')" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs text-slate-600 leading-relaxed">
+        <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 text-emerald-900">
+          <p class="font-bold mb-1">✅ 已連結你的 Firebase 專案：sunghsing</p>
+          <p>所有任務與積分皆獨立儲存在 <code class="bg-emerald-100 px-1 rounded font-mono">/couple_task_board/</code> 路徑下，與你原本的程式資料完全隔離、互不影響！</p>
+        </div>
+
+        <div class="bg-slate-50 rounded-2xl p-3.5 space-y-2 border border-slate-200/80">
+          <h4 class="font-bold text-slate-900 text-sm">🚀 如何讓兩支手機同時打開使用？</h4>
+          <ol class="list-decimal pl-4 space-y-1.5">
+            <li>把這份單一檔案儲存為 <code class="bg-slate-200 px-1 rounded font-mono">index.html</code>（或改名為 <code class="bg-slate-200 px-1 rounded font-mono">couple.html</code> 放在你原本網站同一個資料夾下）。</li>
+            <li>上傳到你的 GitHub Pages、Netlify 或 Firebase Hosting。</li>
+            <li>將網址用 LINE 傳給老婆：
+              <ul class="list-disc pl-4 mt-1 text-slate-500">
+                <li>老婆手機打開切換為 <strong>「👩🏻 老婆派單」</strong></li>
+                <li>你的手機打開切換為 <strong>「👨🏻 老公接單」</strong>（系統會自動記住各自的身分！）</li>
+              </ul>
+            </li>
+          </ol>
+        </div>
+
+        <div class="bg-slate-50 rounded-2xl p-3.5 space-y-2 border border-slate-200/80">
+          <h4 class="font-bold text-slate-900 text-sm">📱 加入手機桌面（變身原生 App）</h4>
+          <ul class="list-disc pl-4 space-y-1">
+            <li><strong>iPhone (Safari)</strong>：點底部中間「分享」按鈕 ➔ 選擇<strong>「加入主畫面」</strong>。</li>
+            <li><strong>Android (Chrome)</strong>：點右上角選單 ➔ 選擇<strong>「加到主畫面」</strong>。</li>
+          </ul>
+        </div>
+      </div>
+
+      <button onclick="window.app.closeModal('guide-modal')" class="w-full py-2.5 rounded-2xl bg-slate-900 text-white font-bold text-xs">
+        我知道了，馬上開始體驗！
+      </button>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       Firebase Realtime Database 核心邏輯與狀態管理
+  ========================================== -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { 
+      getDatabase, 
+      ref, 
+      onValue, 
+      set, 
+      push, 
+      update, 
+      remove 
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    // ==========================================
+    // 使用者專屬的 sunghsing Firebase 設定
+    // ==========================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyDqFzF8L3N1-gxmycxJc8Y4FFQKXiNN2ds",
+      authDomain: "sunghsing.firebaseapp.com",
+      databaseURL: "https://sunghsing-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "sunghsing",
+      storageBucket: "sunghsing.firebasestorage.app",
+      messagingSenderId: "12105900713",
+      appId: "1:12105900713:web:c747d7d6a82f754b90ffb8",
+      measurementId: "G-CQNZHLEVHD"
+    };
+
+    const firebaseApp = initializeApp(firebaseConfig);
+    const rtdb = getDatabase(firebaseApp);
+
+    // 專屬隔離路徑，確保與原本 sunghsing 專案的其他資料完全分開
+    const DB_ROOT = 'couple_task_board';
+
+    // 常用任務一鍵秒派清單
+    const QUICK_PRESETS = [
+      { icon: '🗑️', title: '去倒垃圾 & 分類回收', category: '家務', urgency: 'urgent', points: 10, note: '垃圾車快來了！記得套新的垃圾袋喔～' },
+      { icon: '📦', title: '下樓領包裹 / 超商取貨', category: '跑腿', urgency: 'normal', points: 15, note: '辛苦神隊友老公幫忙搬上樓💪' },
+      { icon: '🥛', title: '買鮮奶 & 日常採買', category: '採買', urgency: 'normal', points: 20, note: '順便買點好吃的零食或布丁回家🍮' },
+      { icon: '🍽️', title: '洗碗 & 擦乾流理台', category: '家務', urgency: 'normal', points: 15, note: '洗完記得把廚餘濾網清一下✨' },
+      { icon: '👶🏻', title: '陪玩顧小孩 1 小時', category: '育兒', urgency: 'urgent', points: 30, note: '讓老婆大人安靜滑手機放空一下🙏' },
+      { icon: '💆🏻‍♀️', title: '幫老婆捏肩按摩 15 分鐘', category: '專屬服務', urgency: 'normal', points: 50, note: '今天肩頸超痠，拜託老公了❤️' }
+    ];
+
+    // 預設任務與獎勵範本 (供一鍵初始化使用)
+    const DEFAULT_TASKS = {
+      task_sample_1: {
+        title: '去全聯買家庭號鮮奶 & 雞蛋',
+        category: '採買',
+        urgency: 'urgent',
+        points: 20,
+        note: '明天早餐要用的，記得看保存期限喔！',
+        status: 'pending',
+        husbandNote: '',
+        createdAt: Date.now() - 1800000
+      },
+      task_sample_2: {
+        title: '把陽台衣服收進來摺好',
+        category: '家務',
+        urgency: 'normal',
+        points: 15,
+        note: '襪子記得一雙一雙配對放好～',
+        status: 'submitted',
+        husbandNote: '全部收好摺進衣櫃囉！請老婆大人驗收 ❤️',
+        createdAt: Date.now() - 5400000,
+        submittedAt: Date.now() - 600000
+      }
+    };
+
+    const DEFAULT_REWARDS = {
+      reward_1: { title: '放風打電動 2 小時', cost: 100, icon: '🎮', description: '完全不打擾的快樂獨處時光，耳根清淨保證！' },
+      reward_2: { title: '免洗碗金牌券 (單次)', cost: 80, icon: '🛡️', description: '無條件跳過一次洗碗任務，由老婆溫柔代勞。' },
+      reward_3: { title: '請喝手搖飲 + 香雞排', cost: 120, icon: '🧋', description: '邪惡宵夜自由配，老婆買單絕不唸熱量！' },
+      reward_4: { title: '假日睡到自然醒特權券', cost: 200, icon: '💤', description: '週末早上不用早起忙家事，睡飽飽再起床。' }
+    };
+
+    // 分類視覺樣式
+    const CATEGORY_STYLES = {
+      '家務': 'bg-amber-100 text-amber-800 border-amber-200',
+      '採買': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      '育兒': 'bg-pink-100 text-pink-800 border-pink-200',
+      '跑腿': 'bg-sky-100 text-sky-800 border-sky-200',
+      '專屬服務': 'bg-purple-100 text-purple-800 border-purple-200'
+    };
+
+    // 應用程式狀態
+    const state = {
+      role: localStorage.getItem('couple_app_role') || 'wife', // 'wife' | 'husband'
+      activeTab: 'tasks', // 'tasks' | 'rewards'
+      taskFilter: 'active', // 'active' | 'pending' | 'submitted' | 'completed'
+      categoryFilter: '全部',
+      isOnline: false,
+      useLocalFallback: false,
+      stats: { points: 100, completedCount: 1 },
+      tasks: {},
+      rewards: {},
+      vouchers: {},
+      submittingTaskId: null
+    };
+
+    // 觸發撒花慶祝動畫
+    function fireConfetti() {
+      if (typeof confetti === 'function') {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.65 }
+        });
+      }
+    }
+
+    // 顯示 Toast 提示
+    let toastTimer = null;
+    function showToast(message, icon = '✨') {
+      const container = document.getElementById('toast-container');
+      const textEl = document.getElementById('toast-text');
+      const iconEl = document.getElementById('toast-icon');
+      iconEl.textContent = icon;
+      textEl.textContent = message;
+      container.classList.remove('hidden');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        container.classList.add('hidden');
+      }, 3200);
+    }
+
+    // 時間差格式化
+    function formatTimeAgo(ts) {
+      if (!ts) return '剛剛';
+      const sec = Math.floor((Date.now() - ts) / 1000);
+      if (sec < 60) return '剛剛';
+      const min = Math.floor(sec / 60);
+      if (min < 60) return `${min} 分鐘前`;
+      const hr = Math.floor(min / 60);
+      if (hr < 24) return `${hr} 小時前`;
+      return `${Math.floor(hr / 24)} 天前`;
+    }
+
+    // ==========================================
+    // 資料庫寫入封裝 (支援雲端 RTDB 與 Local 備援)
+    // ==========================================
+    async function saveToPath(subPath, data) {
+      if (state.useLocalFallback) {
+        localStorage.setItem('couple_fallback_state', JSON.stringify({
+          stats: state.stats,
+          tasks: state.tasks,
+          rewards: state.rewards,
+          vouchers: state.vouchers
+        }));
+        renderAll();
+        return;
+      }
+      await set(ref(rtdb, `${DB_ROOT}/${subPath}`), data);
+    }
+
+    // ==========================================
+    // 啟動 Firebase Realtime Database 監聽
+    // ==========================================
+    function initRealtimeSync() {
+      const boardRef = ref(rtdb, DB_ROOT);
+      const connectedRef = ref(rtdb, '.info/connected');
+
+      onValue(connectedRef, (snap) => {
+        state.isOnline = snap.val() === true;
+        updateSyncBadge();
+      });
+
+      onValue(boardRef, (snapshot) => {
+        const val = snapshot.val();
+        state.useLocalFallback = false;
+        document.getElementById('db-error-banner').classList.add('hidden');
+
+        if (!val) {
+          // 資料庫節點尚無資料，顯示一鍵載入預設資料按鈕
+          state.stats = { points: 100, completedCount: 0 };
+          state.tasks = {};
+          state.rewards = {};
+          state.vouchers = {};
+          document.getElementById('empty-init-card').classList.remove('hidden');
+        } else {
+          document.getElementById('empty-init-card').classList.add('hidden');
+          state.stats = val.stats || { points: 100, completedCount: 0 };
+          state.tasks = val.tasks || {};
+          state.rewards = val.rewards || {};
+          state.vouchers = val.vouchers || {};
+        }
+        updateSyncBadge(true);
+        renderAll();
+      }, (error) => {
+        console.warn('Firebase RTDB Sync warning, switching to local fallback:', error);
+        state.useLocalFallback = true;
+        document.getElementById('db-error-banner').classList.remove('hidden');
+        const saved = localStorage.getItem('couple_fallback_state');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          state.stats = parsed.stats || { points: 100, completedCount: 1 };
+          state.tasks = parsed.tasks || DEFAULT_TASKS;
+          state.rewards = parsed.rewards || DEFAULT_REWARDS;
+          state.vouchers = parsed.vouchers || {};
+        } else {
+          state.tasks = DEFAULT_TASKS;
+          state.rewards = DEFAULT_REWARDS;
+        }
+        updateSyncBadge(false);
+        renderAll();
+      });
+    }
+
+    function updateSyncBadge(connectedOk = state.isOnline) {
+      const badge = document.getElementById('sync-badge');
+      const dot = document.getElementById('sync-dot');
+      const text = document.getElementById('sync-text');
+
+      if (state.useLocalFallback) {
+        badge.className = 'inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200';
+        dot.className = 'w-2 h-2 rounded-full bg-amber-500';
+        text.textContent = '本機暫存模式';
+      } else if (connectedOk) {
+        badge.className = 'inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+        text.textContent = '已連線雲端 (sunghsing)';
+      } else {
+        badge.className = 'inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200';
+        dot.className = 'w-2 h-2 rounded-full bg-amber-500 animate-ping';
+        text.textContent = '同步連線中...';
+      }
+    }
+
+    // ==========================================
+    // UI 渲染函式群
+    // ==========================================
+    function renderQuickPresets() {
+      const container = document.getElementById('quick-tasks-list');
+      container.innerHTML = QUICK_PRESETS.map((item, idx) => `
+        <button onclick="window.app.quickDispatch(${idx})" class="shrink-0 group text-left bg-rose-50/70 hover:bg-rose-100/80 active:scale-95 border border-rose-200/80 rounded-2xl p-3 w-44 transition flex flex-col justify-between">
+          <div class="flex items-center justify-between gap-1 mb-1">
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${CATEGORY_STYLES[item.category] || 'bg-slate-100'}">${item.category}</span>
+            <span class="text-xs font-black text-amber-600">+${item.points}pt</span>
+          </div>
+          <p class="text-xs font-bold text-slate-800 line-clamp-1 group-hover:text-rose-600">
+            ${item.icon} ${item.title}
+          </p>
+          <div class="mt-2 flex items-center justify-between text-[10px] text-rose-500 font-bold">
+            <span>${item.urgency === 'urgent' ? '🔥 急件秒派' : '點擊直接派單'}</span>
+            <i class="fa-solid fa-paper-plane"></i>
+          </div>
+        </button>
+      `).join('');
+    }
+
+    function renderCategoryBar() {
+      const cats = ['全部', '家務', '採買', '育兒', '跑腿', '專屬服務'];
+      const bar = document.getElementById('category-filter-bar');
+      bar.innerHTML = cats.map(c => {
+        const active = state.categoryFilter === c;
+        return `
+          <button onclick="window.app.setCategoryFilter('${c}')" class="px-3 py-1 rounded-full text-xs font-bold shrink-0 transition border ${
+            active 
+              ? 'bg-slate-800 text-white border-slate-800' 
+              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+          }">${c}</button>
+        `;
+      }).join('');
+    }
+
+    function renderAll() {
+      const isWife = state.role === 'wife';
+
+      // 1. 頂部主題與角色切換按鈕
+      const header = document.getElementById('app-header');
+      const brandIcon = document.getElementById('brand-icon');
+      const btnWife = document.getElementById('btn-role-wife');
+      const btnHusband = document.getElementById('btn-role-husband');
+
+      if (isWife) {
+        header.className = 'sticky top-0 z-30 backdrop-blur-md bg-rose-50/90 border-b border-rose-200/80 transition-colors duration-300';
+        brandIcon.className = 'w-10 h-10 rounded-2xl bg-rose-500 text-white flex items-center justify-center shadow-sm transition-colors';
+        btnWife.className = 'flex-1 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-rose-500 text-white shadow-sm';
+        btnHusband.className = 'flex-1 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all text-slate-600 hover:text-slate-900';
+      } else {
+        header.className = 'sticky top-0 z-30 backdrop-blur-md bg-indigo-50/90 border-b border-indigo-200/80 transition-colors duration-300';
+        brandIcon.className = 'w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm transition-colors';
+        btnHusband.className = 'flex-1 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-indigo-600 text-white shadow-sm';
+        btnWife.className = 'flex-1 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all text-slate-600 hover:text-slate-900';
+      }
+
+      // 2. 積分與統計數字
+      const pts = Number(state.stats.points) || 0;
+      document.getElementById('header-points').textContent = pts;
+      document.getElementById('shop-points-display').textContent = pts;
+      document.getElementById('stat-completed-total').textContent = Number(state.stats.completedCount) || 0;
+
+      // 整理任務陣列
+      const taskEntries = Object.entries(state.tasks || {}).map(([id, data]) => ({ id, ...data }));
+      const pendingCount = taskEntries.filter(t => t.status === 'pending').length;
+      const submittedCount = taskEntries.filter(t => t.status === 'submitted').length;
+      const completedCount = taskEntries.filter(t => t.status === 'completed').length;
+
+      // 更新數量徽章
+      document.getElementById('count-active').textContent = pendingCount + submittedCount;
+      document.getElementById('count-pending').textContent = pendingCount;
+      document.getElementById('count-submitted').textContent = submittedCount;
+      document.getElementById('count-completed').textContent = completedCount;
+
+      const badgeWifeReview = document.getElementById('badge-wife-review');
+      if (submittedCount > 0) {
+        badgeWifeReview.textContent = submittedCount;
+        badgeWifeReview.classList.remove('hidden');
+      } else {
+        badgeWifeReview.classList.add('hidden');
+      }
+
+      const badgeHusbandTodo = document.getElementById('badge-husband-todo');
+      if (pendingCount > 0) {
+        badgeHusbandTodo.textContent = pendingCount;
+        badgeHusbandTodo.classList.remove('hidden');
+      } else {
+        badgeHusbandTodo.classList.add('hidden');
+      }
+
+      const navBadgeTasks = document.getElementById('nav-badge-tasks');
+      if (pendingCount + submittedCount > 0) {
+        navBadgeTasks.textContent = pendingCount + submittedCount;
+        navBadgeTasks.classList.remove('hidden');
+      } else {
+        navBadgeTasks.classList.add('hidden');
+      }
+
+      // 3. 角色專屬面板切換
+      document.getElementById('wife-dispatch-panel').classList.toggle('hidden', !isWife);
+      document.getElementById('husband-status-banner').classList.toggle('hidden', isWife);
+      document.getElementById('fab-add-task').classList.toggle('hidden', !isWife);
+      document.getElementById('wife-add-reward-btn-wrap').classList.toggle('hidden', !isWife);
+
+      document.getElementById('husband-banner-title').textContent = pendingCount > 0
+        ? `老婆大人派發了 ${pendingCount} 件待辦任務！`
+        : '太棒了！目前所有任務皆已清空 🎉';
+
+      // 老婆待驗收醒目橫幅
+      const wifeReviewAlert = document.getElementById('wife-review-alert');
+      if (isWife && submittedCount > 0) {
+        document.getElementById('alert-review-count').textContent = submittedCount;
+        wifeReviewAlert.classList.remove('hidden');
+      } else {
+        wifeReviewAlert.classList.add('hidden');
+      }
+
+      // 4. 篩選按鈕高亮狀態
+      ['active', 'pending', 'submitted', 'completed'].forEach(f => {
+        const btn = document.getElementById(`filter-btn-${f}`);
+        if (state.taskFilter === f) {
+          btn.className = 'flex-1 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 bg-white text-slate-900 shadow-sm';
+        } else {
+          btn.className = 'flex-1 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 text-slate-500 hover:text-slate-800';
+        }
+      });
+
+      renderCategoryBar();
+      renderTasksList(taskEntries);
+      renderRewardsAndVouchers();
+    }
+
+    function renderTasksList(taskEntries) {
+      const isWife = state.role === 'wife';
+      const container = document.getElementById('tasks-list-container');
+
+      const filtered = taskEntries
+        .filter(t => {
+          if (state.taskFilter === 'active') return t.status === 'pending' || t.status === 'submitted';
+          return t.status === state.taskFilter;
+        })
+        .filter(t => {
+          if (state.categoryFilter === '全部') return true;
+          return t.category === state.categoryFilter;
+        })
+        .sort((a, b) => {
+          // 老婆視角：待驗收優先排最上面
+          if (isWife) {
+            if (a.status === 'submitted' && b.status !== 'submitted') return -1;
+            if (a.status !== 'submitted' && b.status === 'submitted') return 1;
+          }
+          // 待辦任務中：急件永遠置頂
+          if (a.status === 'pending' && b.status === 'pending') {
+            if (a.urgency === 'urgent' && b.urgency !== 'urgent') return -1;
+            if (a.urgency !== 'urgent' && b.urgency === 'urgent') return 1;
+          }
+          return (b.createdAt || 0) - (a.createdAt || 0);
+        });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white rounded-3xl p-8 text-center border border-slate-100 shadow-xs">
+            <div class="w-12 h-12 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-2 text-xl">
+              <i class="fa-solid fa-check-double"></i>
+            </div>
+            <p class="text-sm font-bold text-slate-700">目前這個分類沒有任務喔！</p>
+            <p class="text-xs text-slate-400 mt-1">
+              ${isWife ? '點擊上方快捷鍵，一秒派發新任務給老公吧～' : '所有交辦事項都處理完畢，去福利社看看能換什麼獎勵吧！'}
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(task => {
+        const isUrgent = task.urgency === 'urgent' && task.status === 'pending';
+        const isSubmitted = task.status === 'submitted';
+        const isCompleted = task.status === 'completed';
+        const catStyle = CATEGORY_STYLES[task.category] || 'bg-slate-100 text-slate-700';
+
+        let cardBorder = 'border-slate-200/90 shadow-xs';
+        if (isUrgent) cardBorder = 'border-2 border-rose-400 urgent-card';
+        else if (isSubmitted) cardBorder = 'border-2 border-amber-400 bg-amber-50/20 shadow-sm';
+        else if (isCompleted) cardBorder = 'border-slate-200 opacity-75 bg-slate-50/60';
+
+        return `
+          <div class="rounded-3xl p-4 transition-all border bg-white relative overflow-hidden ${cardBorder}">
+            ${isUrgent ? `
+              <div class="bg-rose-500 text-white text-[11px] font-bold px-3.5 py-1 -mx-4 -mt-4 mb-3 flex items-center justify-between">
+                <span>🔥 老婆大人標記：十萬火急優先處理！</span>
+                <span>急件置頂</span>
+              </div>
+            ` : ''}
+
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div class="flex items-center flex-wrap gap-1.5">
+                <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${catStyle}">${task.category || '家務'}</span>
+                ${task.status === 'pending' ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">⏳ 待完成</span>` : ''}
+                ${isSubmitted ? `<span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">🙋🏻‍♂️ 待老婆驗收</span>` : ''}
+                ${isCompleted ? `<span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">✅ 已驗收結案</span>` : ''}
+                <span class="text-[11px] text-slate-400">${formatTimeAgo(task.createdAt)}</span>
+              </div>
+
+              <div class="shrink-0 bg-amber-50 border border-amber-200 text-amber-700 px-2.5 py-1 rounded-xl font-black text-xs flex items-center gap-1">
+                <i class="fa-solid fa-star text-amber-500 text-[10px]"></i>
+                <span>+${task.points} pt</span>
+              </div>
+            </div>
+
+            <h3 class="text-base font-black mb-2 ${isCompleted ? 'line-through text-slate-500' : 'text-slate-900'}">${task.title}</h3>
+
+            ${task.note ? `
+              <div class="bg-rose-50/60 border border-rose-100 rounded-2xl px-3 py-2 text-xs text-slate-700 mb-2.5 flex items-start gap-2">
+                <span class="shrink-0 text-rose-500 font-bold">👩🏻 老婆叮嚀：</span>
+                <span class="leading-relaxed">${task.note}</span>
+              </div>
+            ` : ''}
+
+            ${task.husbandNote ? `
+              <div class="bg-indigo-50/80 border border-indigo-100 rounded-2xl px-3 py-2 text-xs text-indigo-950 mb-2.5 flex items-start gap-2">
+                <span class="shrink-0 text-indigo-600 font-bold">👨🏻 老公回報：</span>
+                <span class="leading-relaxed">${task.husbandNote}</span>
+              </div>
+            ` : ''}
+
+            <div class="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+              ${!isWife && task.status === 'pending' ? `
+                <button onclick="window.app.openSubmitReviewModal('${task.id}')" class="w-full py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-200 transition">
+                  <i class="fa-solid fa-check-circle"></i>
+                  <span>🙋🏻‍♂️ 我做完了！提交驗收 (+${task.points}pt)</span>
+                </button>
+              ` : ''}
+
+              ${!isWife && isSubmitted ? `
+                <div class="w-full flex items-center justify-between text-xs text-amber-700 font-bold py-1">
+                  <span>⏳ 已送交老婆大人驗收中...</span>
+                  <span class="text-[11px] text-slate-400">驗收後入帳 +${task.points}pt</span>
+                </div>
+              ` : ''}
+
+              ${isWife && isSubmitted ? `
+                <div class="w-full flex items-center gap-2">
+                  <button onclick="window.app.approveTask('${task.id}')" class="flex-1 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 active:scale-98 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-200 transition">
+                    <i class="fa-solid fa-check-double"></i>
+                    <span>✅ 驗收通過 (+${task.points}pt)</span>
+                  </button>
+                  <button onclick="window.app.returnTask('${task.id}')" class="px-3.5 py-2.5 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold text-xs flex items-center gap-1 transition">
+                    <span>↩️ 退回重做</span>
+                  </button>
+                </div>
+              ` : ''}
+
+              ${isWife && task.status === 'pending' ? `
+                <div class="w-full flex items-center justify-between">
+                  <button onclick="window.app.approveTask('${task.id}')" class="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 py-1 px-2 rounded-lg hover:bg-emerald-50 transition">
+                    <i class="fa-solid fa-check"></i>
+                    <span>直接標記完成並加分</span>
+                  </button>
+                  <button onclick="window.app.deleteTask('${task.id}')" class="text-xs text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 transition" title="刪除任務">
+                    <i class="fa-solid fa-trash-can"></i>
+                  </button>
+                </div>
+              ` : ''}
+
+              ${isCompleted ? `
+                <div class="w-full flex items-center justify-between text-xs text-slate-400">
+                  <span>🎉 已結案並發放 +${task.points} 好老公積分</span>
+                  <button onclick="window.app.deleteTask('${task.id}')" class="text-slate-400 hover:text-rose-500 p-1">
+                    <i class="fa-solid fa-trash-can"></i>
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderRewardsAndVouchers() {
+      const isWife = state.role === 'wife';
+      const currentPoints = Number(state.stats.points) || 0;
+
+      // 1. 渲染福利券票夾
+      const voucherEntries = Object.entries(state.vouchers || {})
+        .map(([id, data]) => ({ id, ...data }))
+        .sort((a, b) => {
+          if (a.status === 'unused' && b.status !== 'unused') return -1;
+          if (a.status !== 'unused' && b.status === 'unused') return 1;
+          return (b.redeemedAt || 0) - (a.redeemedAt || 0);
+        });
+
+      const unusedCount = voucherEntries.filter(v => v.status === 'unused').length;
+      document.getElementById('unused-vouchers-badge').textContent = `可使用 ${unusedCount} 張`;
+
+      const navBadgeVouchers = document.getElementById('nav-badge-vouchers');
+      if (unusedCount > 0) {
+        navBadgeVouchers.textContent = unusedCount;
+        navBadgeVouchers.classList.remove('hidden');
+      } else {
+        navBadgeVouchers.classList.add('hidden');
+      }
+
+      const vouchersContainer = document.getElementById('vouchers-list-container');
+      if (voucherEntries.length === 0) {
+        vouchersContainer.innerHTML = `
+          <div class="text-center py-4 text-xs text-slate-400">
+            目前還沒有兌換過的福利券喔！快用積分換一張吧～
+          </div>
+        `;
+      } else {
+        vouchersContainer.innerHTML = voucherEntries.map(v => {
+          const isUnused = v.status === 'unused';
+          return `
+            <div class="p-3 rounded-2xl border flex items-center justify-between gap-2 ${
+              isUnused ? 'bg-amber-50/70 border-amber-300' : 'bg-slate-50 border-slate-200 opacity-60'
+            }">
+              <div class="flex items-center gap-2.5">
+                <span class="text-2xl">${v.icon || '🎟️'}</span>
+                <div>
+                  <div class="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                    <span>${v.title}</span>
+                    ${isUnused 
+                      ? `<span class="bg-rose-500 text-white text-[10px] px-1.5 py-0.2 rounded-md">可使用</span>` 
+                      : `<span class="bg-slate-300 text-slate-700 text-[10px] px-1.5 py-0.2 rounded-md">已核銷</span>`}
+                  </div>
+                  <div class="text-[11px] text-slate-500">
+                    兌換於 ${formatTimeAgo(v.redeemedAt)} · 消耗 ${v.cost} pt
+                  </div>
+                </div>
+              </div>
+              ${isUnused ? `
+                <button onclick="window.app.useVoucher('${v.id}')" class="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shrink-0 shadow-xs transition active:scale-95">
+                  核銷使用
+                </button>
+              ` : ''}
+            </div>
+          `;
+        }).join('');
+      }
+
+      // 2. 渲染可兌換獎勵商城
+      const rewardEntries = Object.entries(state.rewards || {}).map(([id, data]) => ({ id, ...data }));
+      const rewardsContainer = document.getElementById('rewards-list-container');
+
+      if (rewardEntries.length === 0) {
+        rewardsContainer.innerHTML = `
+          <div class="bg-white rounded-3xl p-6 text-center border border-slate-200 text-xs text-slate-400">
+            目前尚無獎勵項目，可點擊上方「一鍵載入預設任務與獎勵」或新增福利！
+          </div>
+        `;
+        return;
+      }
+
+      rewardsContainer.innerHTML = rewardEntries.map(r => {
+        const canAfford = currentPoints >= Number(r.cost);
+        return `
+          <div class="bg-white rounded-3xl p-4 border border-slate-200/90 shadow-xs flex items-center justify-between gap-3">
+            <div class="flex items-start gap-3">
+              <div class="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200/70 flex items-center justify-center text-2xl shrink-0">
+                ${r.icon || '🎁'}
+              </div>
+              <div>
+                <h4 class="text-sm font-black text-slate-900">${r.title}</h4>
+                <p class="text-xs text-slate-500 mt-0.5 leading-relaxed">${r.description || ''}</p>
+                <div class="mt-1.5 inline-flex items-center gap-1 text-xs font-black text-amber-600">
+                  <i class="fa-solid fa-coins"></i>
+                  <span>需要 ${r.cost} 積分</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex flex-col items-end gap-1.5 shrink-0">
+              <button onclick="window.app.redeemReward('${r.id}')" ${!canAfford ? 'disabled' : ''} class="px-4 py-2 rounded-2xl font-bold text-xs transition ${
+                canAfford
+                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm active:scale-95'
+                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              }">
+                ${canAfford ? '立即兌換' : '積分不足'}
+              </button>
+              ${isWife ? `
+                <button onclick="window.app.deleteReward('${r.id}')" class="text-[11px] text-slate-400 hover:text-rose-500 flex items-center gap-1">
+                  <i class="fa-solid fa-trash-can"></i> 下架
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ==========================================
+    // 掛載全域互動控制項 (window.app)
+    // ==========================================
+    window.app = {
+      setRole(newRole) {
+        state.role = newRole;
+        localStorage.setItem('couple_app_role', newRole);
+        renderAll();
+        showToast(newRole === 'wife' ? '👩🏻 已切換為「老婆大人」派單與驗收視角' : '👨🏻 已切換為「神隊友老公」接單視角');
+      },
+
+      switchTab(tab) {
+        state.activeTab = tab;
+        document.getElementById('tab-tasks').classList.toggle('hidden', tab !== 'tasks');
+        document.getElementById('tab-rewards').classList.toggle('hidden', tab !== 'rewards');
+
+        const navTasks = document.getElementById('nav-btn-tasks');
+        const navRewards = document.getElementById('nav-btn-rewards');
+
+        if (tab === 'tasks') {
+          navTasks.className = `flex flex-col items-center py-1 px-4 rounded-2xl transition ${state.role === 'wife' ? 'text-rose-600' : 'text-indigo-600'} font-bold`;
+          navRewards.className = 'flex flex-col items-center py-1 px-4 rounded-2xl transition text-slate-400 hover:text-slate-600';
+        } else {
+          navRewards.className = 'flex flex-col items-center py-1 px-4 rounded-2xl transition text-amber-600 font-bold';
+          navTasks.className = 'flex flex-col items-center py-1 px-4 rounded-2xl transition text-slate-400 hover:text-slate-600';
+        }
+      },
+
+      setTaskFilter(filter) {
+        state.taskFilter = filter;
+        renderAll();
+      },
+
+      setCategoryFilter(cat) {
+        state.categoryFilter = cat;
+        renderAll();
+      },
+
+      openModal(id) {
+        const el = document.getElementById(id);
+        el.classList.remove('hidden');
+        el.classList.add('flex');
+      },
+
+      closeModal(id) {
+        const el = document.getElementById(id);
+        el.classList.add('hidden');
+        el.classList.remove('flex');
+      },
+
+      selectUrgency(urg) {
+        document.getElementById('input-task-urgency').value = urg;
+        const btnNormal = document.getElementById('btn-urg-normal');
+        const btnUrgent = document.getElementById('btn-urg-urgent');
+        if (urg === 'urgent') {
+          btnUrgent.className = 'flex-1 py-1.5 rounded-xl text-xs font-bold transition bg-rose-500 text-white shadow-xs';
+          btnNormal.className = 'flex-1 py-1.5 rounded-xl text-xs font-bold transition text-slate-500';
+        } else {
+          btnNormal.className = 'flex-1 py-1.5 rounded-xl text-xs font-bold transition bg-white text-slate-800 shadow-xs';
+          btnUrgent.className = 'flex-1 py-1.5 rounded-xl text-xs font-bold transition text-slate-500';
+        }
+      },
+
+      selectPoints(pt) {
+        document.getElementById('input-task-points').value = pt;
+      },
+
+      // 一鍵載入預設範例資料
+      async loadSampleData() {
+        state.stats = { points: 100, completedCount: 2 };
+        state.tasks = DEFAULT_TASKS;
+        state.rewards = DEFAULT_REWARDS;
+        await saveToPath('', {
+          stats: state.stats,
+          tasks: state.tasks,
+          rewards: state.rewards
+        });
+        fireConfetti();
+        showToast('🎉 已載入預設任務與福利商城！');
+      },
+
+      // 老婆：常用任務一鍵秒派
+      async quickDispatch(index) {
+        const item = QUICK_PRESETS[index];
+        if (!item) return;
+        const newId = 'task_' + Date.now();
+        const taskObj = {
+          title: item.title,
+          category: item.category,
+          urgency: item.urgency,
+          points: item.points,
+          note: item.note,
+          status: 'pending',
+          husbandNote: '',
+          createdAt: Date.now()
+        };
+        state.tasks[newId] = taskObj;
+        await saveToPath(`tasks/${newId}`, taskObj);
+        showToast(`⚡ 已秒派任務：「${item.title}」(+${item.points}pt)`, item.icon);
+      },
+
+      // 老婆：新增自訂任務
+      async submitNewTask(e) {
+        e.preventDefault();
+        const title = document.getElementById('input-task-title').value.trim();
+        if (!title) return;
+        const category = document.getElementById('input-task-category').value;
+        const urgency = document.getElementById('input-task-urgency').value;
+        const points = Number(document.getElementById('input-task-points').value) || 20;
+        const note = document.getElementById('input-task-note').value.trim();
+
+        const newId = 'task_' + Date.now();
+        const taskObj = {
+          title,
+          category,
+          urgency,
+          points,
+          note,
+          status: 'pending',
+          husbandNote: '',
+          createdAt: Date.now()
+        };
+
+        state.tasks[newId] = taskObj;
+        await saveToPath(`tasks/${newId}`, taskObj);
+
+        document.getElementById('form-new-task').reset();
+        this.selectUrgency('normal');
+        this.closeModal('new-task-modal');
+        showToast('📢 任務已成功派發至雲端！', '🚀');
+      },
+
+      // 老公：開啟回報完成視窗
+      openSubmitReviewModal(taskId) {
+        const task = state.tasks[taskId];
+        if (!task) return;
+        state.submittingTaskId = taskId;
+        document.getElementById('review-modal-task-title').textContent = `任務：${task.title} (+${task.points} pt)`;
+        document.getElementById('input-husband-note').value = '做好囉！請老婆大人驗收 ❤️';
+        this.openModal('submit-review-modal');
+      },
+
+      // 老公：送出完成回報
+      async confirmSubmitTaskReview(e) {
+        e.preventDefault();
+        const taskId = state.submittingTaskId;
+        const task = state.tasks[taskId];
+        if (!task) return;
+
+        const husbandNote = document.getElementById('input-husband-note').value.trim() || '任務完成！請老婆大人驗收 ❤️';
+        const updatedTask = {
+          ...task,
+          status: 'submitted',
+          husbandNote,
+          submittedAt: Date.now()
+        };
+
+        state.tasks[taskId] = updatedTask;
+        await saveToPath(`tasks/${taskId}`, updatedTask);
+
+        this.closeModal('submit-review-modal');
+        fireConfetti();
+        showToast('🙋🏻‍♂️ 已提交驗收！等待老婆大人確認加分～');
+      },
+
+      // 老婆：驗收通過並加分
+      async approveTask(taskId) {
+        const task = state.tasks[taskId];
+        if (!task) return;
+
+        const updatedTask = {
+          ...task,
+          status: 'completed',
+          completedAt: Date.now()
+        };
+
+        const newPoints = (Number(state.stats.points) || 0) + (Number(task.points) || 0);
+        const newCompletedCount = (Number(state.stats.completedCount) || 0) + 1;
+
+        state.tasks[taskId] = updatedTask;
+        state.stats = { points: newPoints, completedCount: newCompletedCount };
+
+        await saveToPath(`tasks/${taskId}`, updatedTask);
+        await saveToPath('stats', state.stats);
+
+        fireConfetti();
+        showToast(`✅ 驗收通過！老公獲得 +${task.points} 積分！`, '🎉');
+      },
+
+      // 老婆：退回重做
+      async returnTask(taskId) {
+        const task = state.tasks[taskId];
+        if (!task) return;
+
+        const updatedTask = {
+          ...task,
+          status: 'pending',
+          note: `${task.note ? task.note + ' | ' : ''}⚠️ 老婆退回補充：請再檢查一下喔！`
+        };
+
+        state.tasks[taskId] = updatedTask;
+        await saveToPath(`tasks/${taskId}`, updatedTask);
+        showToast('↩️ 已退回為待辦狀態，請老公再次確認');
+      },
+
+      // 刪除任務
+      async deleteTask(taskId) {
+        delete state.tasks[taskId];
+        if (state.useLocalFallback) {
+          await saveToPath('tasks', state.tasks);
+        } else {
+          await remove(ref(rtdb, `${DB_ROOT}/tasks/${taskId}`));
+        }
+        showToast('🗑️ 已刪除該筆任務');
+      },
+
+      // 老婆：新增自訂福利
+      async submitNewReward(e) {
+        e.preventDefault();
+        const icon = document.getElementById('input-reward-icon').value;
+        const title = document.getElementById('input-reward-title').value.trim();
+        const cost = Number(document.getElementById('input-reward-cost').value) || 100;
+        const description = document.getElementById('input-reward-desc').value.trim() || '憑券向老婆大人兌換專屬福利！';
+
+        if (!title) return;
+        const newId = 'reward_' + Date.now();
+        const rewardObj = { icon, title, cost, description };
+
+        state.rewards[newId] = rewardObj;
+        await saveToPath(`rewards/${newId}`, rewardObj);
+
+        this.closeModal('new-reward-modal');
+        showToast('🎁 新福利上架成功！');
+      },
+
+      // 老公：兌換獎勵
+      async redeemReward(rewardId) {
+        const reward = state.rewards[rewardId];
+        if (!reward) return;
+        const currentPoints = Number(state.stats.points) || 0;
+        if (currentPoints < reward.cost) {
+          showToast(`積分還差 ${reward.cost - currentPoints} 分喔！快去多接幾個任務吧💪`, '⚠️');
+          return;
+        }
+
+        const voucherId = 'voucher_' + Date.now();
+        const voucherObj = {
+          title: reward.title,
+          icon: reward.icon || '🎟️',
+          cost: reward.cost,
+          status: 'unused',
+          redeemedAt: Date.now()
+        };
+
+        state.stats.points = currentPoints - reward.cost;
+        state.vouchers[voucherId] = voucherObj;
+
+        await saveToPath('stats', state.stats);
+        await saveToPath(`vouchers/${voucherId}`, voucherObj);
+
+        fireConfetti();
+        showToast(`🎉 兌換成功！「${reward.title}」已收入票夾！`, '🎟️');
+      },
+
+      // 核銷福利券
+      async useVoucher(voucherId) {
+        const voucher = state.vouchers[voucherId];
+        if (!voucher) return;
+
+        const updated = { ...voucher, status: 'used', usedAt: Date.now() };
+        state.vouchers[voucherId] = updated;
+        await saveToPath(`vouchers/${voucherId}`, updated);
+
+        fireConfetti();
+        showToast('✨ 福利券已核銷使用完畢！');
+      },
+
+      // 下架獎勵
+      async deleteReward(rewardId) {
+        delete state.rewards[rewardId];
+        if (state.useLocalFallback) {
+          await saveToPath('rewards', state.rewards);
+        } else {
+          await remove(ref(rtdb, `${DB_ROOT}/rewards/${rewardId}`));
+        }
+        showToast('已下架該獎勵項目');
+      },
+
+      // 開啟手動調整積分視窗
+      openPointsAdjustModal() {
+        document.getElementById('input-adjust-points').value = Number(state.stats.points) || 0;
+        this.openModal('adjust-points-modal');
+      },
+
+      quickAddPoints(delta) {
+        const input = document.getElementById('input-adjust-points');
+        input.value = Math.max(0, (Number(input.value) || 0) + delta);
+      },
+
+      async saveAdjustedPoints(e) {
+        e.preventDefault();
+        const val = Math.max(0, Number(document.getElementById('input-adjust-points').value) || 0);
+        state.stats.points = val;
+        await saveToPath('stats', state.stats);
+        this.closeModal('adjust-points-modal');
+        showToast(`🏆 積分已更新為 ${val} pt！`);
+      }
+    };
+
+    // 初始化渲染與啟動雲端同步
+    renderQuickPresets();
+    renderAll();
+    initRealtimeSync();
+  </script>
+</body>
+</html>
