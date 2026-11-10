@@ -267,6 +267,22 @@
                     </table>
                 </div>
             </div>
+
+            <!-- 機台清單 -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                <div class="p-4 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2"><i class="fa-solid fa-gears text-slate-600"></i>機台清單</h3>
+                        <p class="text-xs text-slate-500 mt-0.5">登記產程時從這裡選機台，統計才不會因為打字不同而分散。</p>
+                    </div>
+                    <div class="need-admin flex gap-2">
+                        <button onclick="addMachineRow()" class="bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium"><i class="fa-solid fa-plus mr-1"></i>新增機台</button>
+                        <button onclick="saveMachines()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium"><i class="fa-solid fa-floppy-disk mr-1"></i>儲存機台清單</button>
+                    </div>
+                </div>
+                <div id="machine-list" class="divide-y divide-slate-200 text-sm"></div>
+                <div id="machine-remap" class="need-admin"></div>
+            </div>
         </section>
 
         <!-- ==================== 模組二：射出成型條件表 (SOP) ==================== -->
@@ -489,7 +505,7 @@
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-600 mb-1">機台編號</label>
-                        <input type="text" id="log-machine" placeholder="如：#01 (120T)" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        <select id="log-machine" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"></select>
                     </div>
                     <div class="sm:col-span-2">
                         <label class="block text-xs font-semibold text-slate-600 mb-1">生產產品</label>
@@ -546,11 +562,10 @@
                 <!-- 搜尋與篩選 -->
                 <div class="bg-slate-100/60 p-3.5 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
                     <div>
-                        <label class="block text-slate-500 font-semibold mb-1">搜尋機台</label>
-                        <div class="relative">
-                            <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400"></i>
-                            <input type="text" id="filter-machine" oninput="renderLogs()" placeholder="如：#01" class="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-blue-500">
-                        </div>
+                        <label class="block text-slate-500 font-semibold mb-1">篩選機台</label>
+                        <select id="filter-machine" onchange="renderLogs()" class="w-full py-1.5 px-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 font-medium">
+                            <option value="">全部機台</option>
+                        </select>
                     </div>
                     <div>
                         <label class="block text-slate-500 font-semibold mb-1">篩選產品</label>
@@ -886,7 +901,7 @@
         const LEGACY_KEY = 'INJECTION_MOLDING_APP_DATA_V1';   // 舊版本機資料
 
         window.ROLE_LABEL = { admin: '管理者', editor: '技術員', operator: '作業員' };
-        window.appData = { products: [], sops: {}, logs: [] };
+        window.appData = { products: [], sops: {}, logs: [], machines: [] };
         window.membersData = [];
         window.accessRequests = [];
         window.currentUser = null;   // { email, name, role }
@@ -979,6 +994,10 @@
             listen('logs', fs.collection(db, 'logs'), snap => {
                 window.appData.logs = snap.docs.map(d => ({ ...d.data(), id: d.id }))
                     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
+            });
+            // 機台清單存在 meta/machines 一份文件裡（成員可讀、管理者可改，沿用現有規則）
+            listen('machines', fs.doc(db, 'meta', 'machines'), snap => {
+                window.appData.machines = snap.exists() ? (snap.data().list || []) : [];
             });
             if (window.currentUser.role === 'admin') {
                 listen('members', fs.collection(db, 'members'), snap => {
@@ -1181,7 +1200,18 @@
                 batch.delete(fs.doc(db, 'accessRequests', emailKey(email)));
                 bg(batch.commit());
             },
-            rejectRequest(email) { bg(fs.deleteDoc(fs.doc(db, 'accessRequests', emailKey(email)))); }
+            rejectRequest(email) { bg(fs.deleteDoc(fs.doc(db, 'accessRequests', emailKey(email)))); },
+
+            // 機台
+            saveMachines(list) { bg(fs.setDoc(fs.doc(db, 'meta', 'machines'), { list, ...stamp() })); },
+            // 把舊紀錄裡手打的機台名稱，對應到機台清單中的某一台
+            async remapLogs(fromText, machine) {
+                const ops = window.appData.logs
+                    .filter(l => !l.machineId && (l.machine || '').trim() === fromText)
+                    .map(l => ({ type: 'set', ref: fs.doc(db, 'logs', l.id), data: { ...stripId(l), machine: machine.code, machineId: machine.id, machineRemappedFrom: fromText } }));
+                await commitInChunks(ops);
+                return ops.length;
+            }
         };
 
         // ---------- 登入狀態變化 ----------
@@ -1189,7 +1219,7 @@
             if (memberUnsub) { memberUnsub(); memberUnsub = null; }
             stopListeners();
             window.currentUser = null;
-            window.appData = { products: [], sops: {}, logs: [] };
+            window.appData = { products: [], sops: {}, logs: [], machines: [] };
 
             if (!user) { setRole(''); showScreen('login'); return; }
             if (!user.emailVerified) { showScreen('verify', { email: user.email }); return; }
@@ -1228,7 +1258,7 @@
                 cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null') || JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null');
             } catch (e) {}
             if (cached && Array.isArray(cached.products)) {
-                window.appData = { products: cached.products, sops: cached.sops || {}, logs: cached.logs || [] };
+                window.appData = { products: cached.products, sops: cached.sops || {}, logs: cached.logs || [], machines: cached.machines || [] };
                 window.currentUser = { email: '', name: '離線唯讀', role: 'readonly' };
                 setRole('readonly');
                 $('offline-banner').classList.remove('hidden');
@@ -1671,10 +1701,13 @@
             const productId = document.getElementById('log-product-select').value;
             const product = window.appData.products.find(x => x.id === productId);
             if (!product) { showToast('請先選擇產品'); return; }
+            const machine = (window.appData.machines || []).find(m => m.id === document.getElementById('log-machine').value);
+            if (!machine) { showToast('請先選擇機台（管理者可在「1. 產品與模具資料」建立機台清單）'); return; }
             const newLog = {
                 id: 'log_' + Date.now(),
                 date: document.getElementById('log-date').value,
-                machine: document.getElementById('log-machine').value.trim(),
+                machine: machine.code,
+                machineId: machine.id,
                 productId: productId,
                 // 規格快照：產品日後被修改或刪除，歷史紀錄的標準量與達成率仍正確
                 productCode: product?.code ?? '',
@@ -1713,13 +1746,13 @@
         }
 
         function getFilteredLogs() {
-            const mFilter = (document.getElementById('filter-machine')?.value || '').trim().toLowerCase();
+            const mFilter = document.getElementById('filter-machine')?.value || '';
             const pFilter = document.getElementById('filter-product')?.value || '';
             const dStart = document.getElementById('filter-date-start')?.value || '';
             const dEnd = document.getElementById('filter-date-end')?.value || '';
 
             return window.appData.logs.filter(log => {
-                if (mFilter && !(log.machine || '').toLowerCase().includes(mFilter)) return false;
+                if (mFilter && logMachineId(log) !== mFilter) return false;
                 if (pFilter && log.productId !== pFilter) return false;
                 if (dStart && log.date < dStart) return false;
                 if (dEnd && log.date > dEnd) return false;
@@ -2056,7 +2089,160 @@
             showToast(`已預先開通 ${email}，對方註冊並驗證信箱後即可使用`);
         }
 
+        // ==================== 機台清單 ====================
+        // 舊紀錄沒有 machineId：若手打的名稱剛好等於某台的編號，也算那一台
+        function logMachineId(log) {
+            if (log.machineId) return log.machineId;
+            const t = (log.machine || '').trim();
+            return (window.appData.machines || []).find(m => m.code === t)?.id || '';
+        }
+
+        let machineDraft = null;      // 管理者編輯中的清單（未儲存前不被同步覆蓋）
+        let machineDirty = false;
+
+        function machineStats(id) {
+            const logs = window.appData.logs.filter(l => logMachineId(l) === id);
+            const good = logs.reduce((a, l) => a + (l.goodQty || 0), 0);
+            const ng = logs.reduce((a, l) => a + (l.ngQty || 0), 0);
+            const hours = logs.reduce((a, l) => a + (l.hours || 0), 0);
+            return { count: logs.length, good, hours, yieldRate: good + ng > 0 ? (good / (good + ng) * 100).toFixed(1) : '--' };
+        }
+
+        function renderMachines() {
+            const isAdmin = window.currentUser?.role === 'admin';
+            if (!machineDirty) machineDraft = JSON.parse(JSON.stringify(window.appData.machines || []));
+            const list = document.getElementById('machine-list');
+
+            if (machineDraft.length === 0) {
+                list.innerHTML = isAdmin
+                    ? `<div class="p-5 text-center space-y-3">
+                           <div class="text-slate-500 text-sm">還沒有建立機台清單</div>
+                           <div class="flex items-center justify-center gap-2 text-sm">
+                               快速建立 <input id="machine-seed-count" type="number" min="1" max="50" value="9" class="w-16 border border-slate-300 rounded-lg px-2 py-1 text-center"> 台（#01 起）
+                               <button onclick="seedMachines()" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium">建立</button>
+                           </div>
+                       </div>`
+                    : '<div class="p-5 text-center text-slate-400 text-sm">管理者尚未建立機台清單</div>';
+            } else {
+                list.innerHTML = machineDraft.map((m, i) => {
+                    const st = machineStats(m.id);
+                    const stat = `<span class="text-xs text-slate-500">${st.count} 批 · ${st.hours} hr · 良品 ${st.good.toLocaleString()} · 良率 ${st.yieldRate}%</span>`;
+                    if (!isAdmin) {
+                        return `<div class="p-3 px-4 flex flex-wrap items-center justify-between gap-2 ${m.active === false ? 'opacity-50' : ''}">
+                            <div><span class="font-bold text-slate-800">${esc(m.code)}</span>
+                            ${m.tonnage ? `<span class="ml-2 text-xs bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5">${esc(m.tonnage)}T</span>` : ''}
+                            ${m.note ? `<span class="ml-2 text-xs text-slate-500">${esc(m.note)}</span>` : ''}
+                            ${m.active === false ? '<span class="ml-2 text-xs text-rose-600">停用</span>' : ''}</div>${stat}</div>`;
+                    }
+                    return `<div class="p-3 px-4 grid grid-cols-12 gap-2 items-center ${m.active === false ? 'bg-slate-50' : ''}">
+                        <input value="${esc(m.code)}" oninput="editMachine(${i},'code',this.value)" placeholder="編號" class="col-span-3 sm:col-span-2 border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-bold">
+                        <div class="col-span-3 sm:col-span-2 flex items-center gap-1"><input type="number" value="${esc(m.tonnage ?? '')}" oninput="editMachine(${i},'tonnage',this.value)" placeholder="噸數" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"><span class="text-xs text-slate-500">T</span></div>
+                        <input value="${esc(m.note || '')}" oninput="editMachine(${i},'note',this.value)" placeholder="備註（廠牌、位置…）" class="col-span-6 sm:col-span-4 border border-slate-300 rounded-lg px-2 py-1.5 text-sm">
+                        <div class="col-span-9 sm:col-span-3">${stat}</div>
+                        <div class="col-span-3 sm:col-span-1 flex items-center justify-end gap-2">
+                            <label class="text-xs text-slate-600 flex items-center gap-1 whitespace-nowrap"><input type="checkbox" ${m.active === false ? '' : 'checked'} onchange="editMachine(${i},'active',this.checked)">使用中</label>
+                            ${st.count === 0 ? `<button onclick="removeMachineRow(${i})" title="刪除" class="text-slate-400 hover:text-rose-600"><i class="fa-solid fa-trash-can"></i></button>` : ''}
+                        </div>
+                    </div>`;
+                }).join('') + (machineDirty ? '<div class="p-3 text-center text-xs font-semibold text-amber-700 bg-amber-50">尚未儲存，記得按右上「儲存機台清單」</div>' : '');
+            }
+            renderMachineRemap();
+        }
+
+        // 舊紀錄中對不上清單的機台名稱 → 讓管理者一次對應
+        function renderMachineRemap() {
+            const box = document.getElementById('machine-remap');
+            if (window.currentUser?.role !== 'admin' || !(window.appData.machines || []).length) { box.innerHTML = ''; return; }
+            const counts = {};
+            window.appData.logs.filter(l => !logMachineId(l)).forEach(l => {
+                const t = (l.machine || '').trim() || '(空白)';
+                counts[t] = (counts[t] || 0) + 1;
+            });
+            const entries = Object.entries(counts);
+            if (entries.length === 0) { box.innerHTML = ''; return; }
+            const opts = window.appData.machines.map(m => `<option value="${esc(m.id)}">${esc(m.code)}${m.tonnage ? ` (${esc(m.tonnage)}T)` : ''}</option>`).join('');
+            box.innerHTML = `<div class="p-4 border-t border-amber-200 bg-amber-50/60 space-y-2">
+                <div class="text-xs font-bold text-amber-900"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>整理舊紀錄：下面這些手打的機台名稱對不上清單，請選它實際是哪一台</div>
+                ${entries.map(([t, n], i) => `<div class="flex flex-wrap items-center gap-2 text-sm">
+                    <span class="font-mono bg-white border border-amber-200 rounded px-2 py-1">${esc(t)}</span><span class="text-xs text-slate-500">${n} 筆 →</span>
+                    <select id="remap-${i}" class="border border-slate-300 rounded-lg px-2 py-1 text-sm bg-white"><option value="">選擇機台</option>${opts}</select>
+                    <button onclick="applyRemap(${i})" data-text="${esc(t)}" id="remap-btn-${i}" class="bg-amber-600 text-white px-3 py-1 rounded-lg text-xs font-medium">套用</button>
+                </div>`).join('')}
+            </div>`;
+        }
+
+        async function applyRemap(i) {
+            const text = document.getElementById('remap-btn-' + i).dataset.text;
+            const m = window.appData.machines.find(x => x.id === document.getElementById('remap-' + i).value);
+            if (!m) { showToast('請先選擇機台'); return; }
+            if (!confirm(`把「${text}」的紀錄全部改成 ${m.code}？`)) return;
+            try {
+                const n = await window.api.remapLogs(text === '(空白)' ? '' : text, m);
+                showToast(`已整理 ${n} 筆紀錄`);
+            } catch (e) { showToast('整理失敗：' + (e.code || e.message)); }
+        }
+
+        function editMachine(i, key, val) {
+            if (key === 'tonnage') val = val === '' ? null : parseFloat(val);
+            if (key === 'code' || key === 'note') val = val.trim();
+            machineDraft[i][key] = val;
+            if (!machineDirty) { machineDirty = true; if (key === 'active') renderMachines(); else showMachineDirtyHint(); }
+            else if (key === 'active') renderMachines();
+        }
+        function showMachineDirtyHint() {
+            const list = document.getElementById('machine-list');
+            if (!list.querySelector('.machine-dirty-hint')) list.insertAdjacentHTML('beforeend', '<div class="machine-dirty-hint p-3 text-center text-xs font-semibold text-amber-700 bg-amber-50">尚未儲存，記得按右上「儲存機台清單」</div>');
+        }
+        function addMachineRow() {
+            const n = machineDraft.length + 1;
+            machineDraft.push({ id: 'm_' + Date.now(), code: '#' + String(n).padStart(2, '0'), tonnage: null, note: '', active: true });
+            machineDirty = true;
+            renderMachines();
+        }
+        function removeMachineRow(i) {
+            if (!confirm(`刪除機台 ${machineDraft[i].code}？`)) return;
+            machineDraft.splice(i, 1);
+            machineDirty = true;
+            renderMachines();
+        }
+        function seedMachines() {
+            const n = Math.min(50, Math.max(1, parseInt(document.getElementById('machine-seed-count').value, 10) || 9));
+            const t = Date.now();
+            machineDraft = Array.from({ length: n }, (_, i) => ({ id: `m_${t}_${i + 1}`, code: '#' + String(i + 1).padStart(2, '0'), tonnage: null, note: '', active: true }));
+            machineDirty = true;
+            renderMachines();
+            showToast(`已建立 ${n} 台，可以補上噸數，然後按「儲存機台清單」`);
+        }
+        function saveMachines() {
+            const codes = machineDraft.map(m => m.code);
+            if (codes.some(c => !c)) { showToast('機台編號不能空白'); return; }
+            const dup = codes.find((c, i) => codes.indexOf(c) !== i);
+            if (dup) { showToast(`機台編號 ${dup} 重複了`); return; }
+            window.api.saveMachines(machineDraft);
+            machineDirty = false;
+            showToast('機台清單已儲存');
+        }
+
+        function populateMachineDropdowns() {
+            const machines = window.appData.machines || [];
+            const label = m => `${m.code}${m.tonnage ? ` (${m.tonnage}T)` : ''}${m.note ? ` ${m.note}` : ''}`;
+            const logSel = document.getElementById('log-machine');
+            const prev = logSel.value;
+            const active = machines.filter(m => m.active !== false);
+            logSel.innerHTML = active.length
+                ? '<option value="">請選擇機台</option>' + active.map(m => `<option value="${esc(m.id)}">${esc(label(m))}</option>`).join('')
+                : '<option value="">尚無機台（請管理者建立）</option>';
+            if (active.some(m => m.id === prev)) logSel.value = prev;
+
+            const fSel = document.getElementById('filter-machine');
+            const fPrev = fSel.value;
+            fSel.innerHTML = '<option value="">全部機台</option>' + machines.map(m => `<option value="${esc(m.id)}">${esc(label(m))}</option>`).join('');
+            if (machines.some(m => m.id === fPrev)) fSel.value = fPrev;
+        }
+
         function refreshAllViews() {
+            populateMachineDropdowns();
+            renderMachines();
             renderProducts();
             loadSopForSelectedProduct();
             updateLogStandardPreview();
