@@ -2143,6 +2143,7 @@
                 const pn = normText(p.name), pc = normText(p.code);
                 let sc = 0;
                 if (pc && text.includes(pc)) sc += 20;
+                if (pn && text.includes(pn)) sc += 25;           // 完整說出品名（例：14.7cmH）最優先
                 q.sizes.forEach(sz => {
                     const num = sz.replace(/[a-z吋]+$/, '');
                     if (pn.includes(sz) || pc.includes(sz)) sc += 12;
