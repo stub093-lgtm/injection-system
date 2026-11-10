@@ -1033,17 +1033,33 @@
         }
 
         // ---------- 舊版資料轉移 ----------
+        // 舊版資料來源：雲端的 factory_system/main_data，或這台裝置瀏覽器裡的舊版本機資料
+        // （舊版與 v3 放在同一個網域，所以同一台裝置的同一個瀏覽器讀得到舊版存的資料）
+        function readLocalLegacy() {
+            try {
+                const d = JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null');
+                return (d && Array.isArray(d.products) && d.products.length > 0) ? d : null;
+            } catch (e) { return null; }
+        }
+        async function loadLegacy() {
+            try {
+                const legacy = await fs.getDoc(fs.doc(db, 'factory_system', 'main_data'));
+                if (legacy.exists()) return { data: legacy.data(), source: '雲端' };
+            } catch (e) { console.warn('讀取雲端舊資料失敗:', e); }
+            const local = readLocalLegacy();
+            return local ? { data: local, source: '這台裝置' } : null;
+        }
         async function checkLegacyData() {
             try {
                 const [legacy, marker] = await Promise.all([
-                    fs.getDoc(fs.doc(db, 'factory_system', 'main_data')),
+                    loadLegacy(),
                     fs.getDoc(fs.doc(db, 'meta', 'migration'))
                 ]);
-                const show = legacy.exists() && !(marker.exists() && marker.data().done);
+                const show = !!legacy && !(marker.exists() && marker.data().done);
                 $('migration-banner').classList.toggle('hidden', !show);
                 if (show) {
-                    const d = legacy.data();
-                    $('migration-summary').textContent = `舊資料：產品 ${(d.products || []).length} 項、產程紀錄 ${(d.logs || []).length} 筆`;
+                    const d = legacy.data;
+                    $('migration-summary').textContent = `${legacy.source}上的舊資料：產品 ${(d.products || []).length} 項、產程紀錄 ${(d.logs || []).length} 筆`;
                 }
             } catch (e) {
                 console.warn('檢查舊資料失敗:', e);
@@ -1118,9 +1134,9 @@
 
             // 一鍵轉移舊版單一文件 → 新結構（舊文件保留不刪，當作備份）
             async migrateLegacy() {
-                const legacy = await fs.getDoc(fs.doc(db, 'factory_system', 'main_data'));
-                if (!legacy.exists()) throw new Error('找不到舊資料');
-                const d = legacy.data();
+                const legacy = await loadLegacy();
+                if (!legacy) throw new Error('找不到舊資料');
+                const d = legacy.data;
                 const ops = [];
                 (d.products || []).forEach(p => ops.push({ type: 'set', ref: fs.doc(db, 'products', p.id), data: stripId(p) }));
                 Object.entries(d.sops || {}).forEach(([id, s]) => {
@@ -1866,7 +1882,10 @@
         }
 
         function exportData() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.appData, null, 2));
+            // 用 Blob 網址下載：iPhone Safari 對 data: 網址的下載常常沒反應
+            const blob = new Blob([JSON.stringify(window.appData, null, 2)], { type: 'application/json' });
+            const dataStr = URL.createObjectURL(blob);
+            setTimeout(() => URL.revokeObjectURL(dataStr), 10000);
             const downloadAnchor = document.createElement('a');
             const today = todayLocal();
             downloadAnchor.setAttribute("href", dataStr);
