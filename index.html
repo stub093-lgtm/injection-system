@@ -729,55 +729,66 @@
             </div>
         </section>
 
-        <!-- ==================== 模組五：報價試算 ==================== -->
+        <!-- ==================== 模組五：報價試算（報價 − 原料 = 剩餘） ==================== -->
         <section id="tab-quote" class="tab-content hidden space-y-4">
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 <div class="lg:col-span-5 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
                     <div>
                         <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-file-invoice-dollar text-amber-600"></i>報價試算</h2>
-                        <p class="text-xs text-slate-500 mt-0.5">報價 = 原料費（含料頭與損耗）＋ 代工費</p>
+                        <p class="text-xs text-slate-500 mt-0.5">報價扣掉原料（含料頭與損耗）後，每件還剩多少。</p>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-600 mb-1.5">產品</label>
                         <select id="quote-product-select" onchange="runQuoteCalc()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-medium outline-none"></select>
+                        <div id="quote-info" class="text-xs text-slate-500 mt-1.5"></div>
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">訂單數量 (pcs)</label>
-                        <input type="number" inputmode="numeric" id="quote-qty" value="50000" min="0" oninput="runQuoteCalc()" class="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-lg font-bold text-blue-700 outline-none">
-                    </div>
-                    <div class="grid grid-cols-3 gap-3">
-                        <div>
-                            <label class="block text-[11px] font-semibold text-slate-600 mb-1">代工 (元/件)</label>
-                            <input type="number" id="quote-processing-price" value="0.8" step="0.01" min="0" oninput="runQuoteCalc()" class="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-2 text-sm font-bold text-amber-900 outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-[11px] font-semibold text-slate-600 mb-1">原料 (元/kg)</label>
-                            <input type="number" id="quote-material-price" value="65" step="1" min="0" oninput="runQuoteCalc()" class="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-2 text-sm font-bold text-amber-900 outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-[11px] font-semibold text-slate-600 mb-1">損耗 (%)</label>
-                            <input type="number" id="quote-loss-rate" value="3" step="0.5" min="0" oninput="runQuoteCalc()" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-sm font-bold outline-none">
-                        </div>
-                    </div>
-                </div>
-                <div class="lg:col-span-7 space-y-3">
-                    <div class="bg-blue-50 p-5 rounded-2xl border border-blue-200">
-                        <div class="text-xs font-bold text-blue-800">每件報價（料＋工）</div>
-                        <div class="text-3xl font-extrabold text-blue-700 mt-1" id="q-per-pc">NT$ --</div>
-                        <div class="text-sm text-blue-700 mt-1" id="q-total">訂單報價總額：NT$ --</div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">報價（元/件）</label>
+                        <input type="number" inputmode="decimal" id="quote-price" value="1.5" step="0.01" min="0" oninput="runQuoteCalc()" class="w-full bg-white border border-amber-300 rounded-xl px-3.5 py-2.5 text-lg font-bold text-amber-800 outline-none">
                     </div>
                     <div class="grid grid-cols-2 gap-3">
-                        <div class="bg-amber-50 p-4 rounded-2xl border border-amber-200">
-                            <div class="text-xs font-bold text-amber-800">代工費小計</div>
-                            <div class="text-xl font-extrabold text-amber-700 mt-1" id="q-proc">NT$ --</div>
-                            <div class="text-[11px] text-amber-600 mt-0.5" id="q-proc-sub"></div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">原料單價（元/kg）</label>
+                            <input type="number" inputmode="decimal" id="quote-material-price" value="65" step="0.5" min="0" oninput="runQuoteCalc()" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold outline-none">
                         </div>
-                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                            <div class="text-xs font-bold text-slate-600">原料費小計</div>
-                            <div class="text-xl font-extrabold text-slate-800 mt-1" id="q-mat">NT$ --</div>
-                            <div class="text-[11px] text-slate-500 mt-0.5" id="q-mat-sub"></div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">不良損耗（%）</label>
+                            <input type="number" inputmode="decimal" id="quote-loss-rate" value="3" step="0.5" min="0" oninput="runQuoteCalc()" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold outline-none">
                         </div>
                     </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">訂單數量（選填，算總額用）</label>
+                        <input type="number" inputmode="numeric" id="quote-qty" value="50000" min="0" oninput="runQuoteCalc()" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold outline-none">
+                    </div>
+                </div>
+
+                <div class="lg:col-span-7 space-y-3">
+                    <!-- 主結果 -->
+                    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                        <div class="p-4 flex justify-between items-center border-b border-slate-100"><span class="text-slate-600">報價</span><strong id="q-price" class="text-lg text-slate-800 whitespace-nowrap">--</strong></div>
+                        <div class="p-4 flex justify-between items-center border-b border-slate-100"><span class="text-slate-600">− 原料<span id="q-mat-detail" class="block text-[11px] text-slate-400"></span></span><strong id="q-mat" class="text-lg text-rose-600 whitespace-nowrap shrink-0 pl-2">--</strong></div>
+                        <div class="p-4 flex justify-between items-center bg-emerald-50"><span class="font-bold text-emerald-800">每件扣料後剩餘<span id="q-ratio" class="block text-[11px] font-normal text-emerald-700"></span></span><strong id="q-remain" class="text-2xl font-extrabold text-emerald-700 whitespace-nowrap shrink-0 pl-2">--</strong></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-blue-50 p-4 rounded-2xl border border-blue-200">
+                            <div class="text-xs font-bold text-blue-800">每小時產值（扣料後）</div>
+                            <div class="text-xl font-extrabold text-blue-700 mt-1" id="q-hour">--</div>
+                            <div class="text-[11px] text-blue-600 mt-0.5" id="q-hour-sub"></div>
+                        </div>
+                        <div class="bg-indigo-50 p-4 rounded-2xl border border-indigo-200">
+                            <div class="text-xs font-bold text-indigo-800">每天產值（扣料後）</div>
+                            <div class="text-xl font-extrabold text-indigo-700 mt-1" id="q-day">--</div>
+                            <div class="text-[11px] text-indigo-600 mt-0.5">以生產試算的「每日開機」時數計</div>
+                        </div>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm space-y-1.5">
+                        <div class="font-bold text-slate-700 mb-1">整張訂單</div>
+                        <div class="flex justify-between"><span class="text-slate-500">訂單總額</span><strong id="q-order-total">--</strong></div>
+                        <div class="flex justify-between"><span class="text-slate-500">原料總額</span><strong id="q-order-mat" class="text-right">--</strong></div>
+                        <div class="flex justify-between"><span class="text-slate-500">扣料後剩餘</span><strong id="q-order-remain" class="text-emerald-700">--</strong></div>
+                        <div class="flex justify-between"><span class="text-slate-500">需要機台時間</span><strong id="q-order-hours">--</strong></div>
+                    </div>
+                    <p class="text-[11px] text-slate-400 px-1">尚未扣除電費、人工、包材、運費等。之後要加哪些項目，可以再一項一項加進來。</p>
                 </div>
             </div>
         </section>
@@ -2052,25 +2063,40 @@
             });
         }
 
-        // ==================== 報價試算 ====================
+        // ==================== 報價試算：報價 − 原料 = 剩餘 ====================
+        const money = (v, d = 0) => `NT$ ${v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`;
         function runQuoteCalc() {
             const p = window.appData.products.find(x => x.id === document.getElementById('quote-product-select').value);
             if (!p) return;
-            const qty = Math.max(0, parseInt(document.getElementById('quote-qty').value, 10) || 0);
-            const proc = parseFloat(document.getElementById('quote-processing-price').value) || 0;
+            const price = parseFloat(document.getElementById('quote-price').value) || 0;
             const matPrice = parseFloat(document.getElementById('quote-material-price').value) || 0;
             const loss = parseFloat(document.getElementById('quote-loss-rate').value) || 0;
+            const qty = Math.max(0, parseInt(document.getElementById('quote-qty').value, 10) || 0);
+            const daily = parseFloat(document.getElementById('calc-daily-hours')?.value) || 20;
+
+            const shotW = p.partWeight * p.cavities + p.runnerWeight;
+            // 每個「良品」分攤的用料（g）：每模總重 ÷ 穴數，再乘上損耗
+            const gPerGood = shotW / p.cavities * (1 + loss / 100);
+            const matPerPc = gPerGood / 1000 * matPrice;
+            const remain = price - matPerPc;
+            const goodPerHour = (3600 / p.cycleTime) * p.cavities / (1 + loss / 100);
+
+            document.getElementById('quote-info').textContent = `${p.material} ・ ${p.cavities} 穴 ・ 週期 ${p.cycleTime}s ・ 每模 ${shotW.toFixed(1)}g`;
+            document.getElementById('q-price').textContent = money(price, 3);
+            document.getElementById('q-mat').textContent = `− ${money(matPerPc, 3)}`;
+            document.getElementById('q-mat-detail').textContent = `每件用料 ${gPerGood.toFixed(2)}g（含料頭、損耗 ${loss}%）× ${matPrice} 元/kg`;
+            document.getElementById('q-remain').textContent = money(remain, 3);
+            document.getElementById('q-remain').classList.toggle('text-rose-600', remain < 0);
+            document.getElementById('q-ratio').textContent = price > 0 ? `原料佔報價 ${(matPerPc / price * 100).toFixed(1)}%` : '';
+            document.getElementById('q-hour').textContent = money(remain * goodPerHour);
+            document.getElementById('q-hour-sub').textContent = `每小時約 ${Math.floor(goodPerHour).toLocaleString()} 個良品`;
+            document.getElementById('q-day').textContent = money(remain * goodPerHour * daily);
+
             const r = calcFromShots(p, Math.ceil(qty * (1 + loss / 100) / p.cavities), loss);
-            const procTotal = qty * proc;
-            const matTotal = r.kg * matPrice;
-            const total = procTotal + matTotal;
-            const perPc = qty > 0 ? total / qty : 0;
-            document.getElementById('q-per-pc').textContent = `NT$ ${perPc.toFixed(3)}`;
-            document.getElementById('q-total').textContent = `訂單報價總額：NT$ ${Math.round(total).toLocaleString()}`;
-            document.getElementById('q-proc').textContent = `NT$ ${Math.round(procTotal).toLocaleString()}`;
-            document.getElementById('q-proc-sub').textContent = `${qty.toLocaleString()} pcs × ${proc} 元`;
-            document.getElementById('q-mat').textContent = `NT$ ${Math.round(matTotal).toLocaleString()}`;
-            document.getElementById('q-mat-sub').textContent = `${r.kg.toFixed(1)} kg（約 ${Math.ceil(r.kg / BAG_KG)} 包）× ${matPrice} 元；每件料 NT$ ${(qty > 0 ? matTotal / qty : 0).toFixed(3)}`;
+            document.getElementById('q-order-total').textContent = money(qty * price);
+            document.getElementById('q-order-mat').textContent = `${money(r.kg * matPrice)}（${r.kg.toFixed(1)} kg ≈ ${Math.ceil(r.kg / BAG_KG)} 包）`;
+            document.getElementById('q-order-remain').textContent = money(qty * price - r.kg * matPrice);
+            document.getElementById('q-order-hours').textContent = `${fmtHours(r.hours)}（${(r.hours / daily).toFixed(1)} 天）`;
         }
 
         function exportData() {
