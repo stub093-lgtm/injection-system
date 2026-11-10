@@ -50,6 +50,18 @@
             }
         }
 
+        /* Tailwind CDN 載入失敗（離線）時的保底：確保 hidden 仍然有效 */
+        .hidden { display: none; }
+
+        /* ===== 角色權限顯示控制 =====
+           need-admin  : 只有管理者看得到
+           need-editor : 管理者、技術員看得到
+           need-member : 登入的成員都看得到（離線唯讀模式隱藏） */
+        body:not([data-role="admin"]) .need-admin { display: none !important; }
+        body:not([data-role="admin"]):not([data-role="editor"]) .need-editor { display: none !important; }
+        body:not([data-role="admin"]):not([data-role="editor"]):not([data-role="operator"]) .need-member { display: none !important; }
+        input[readonly], textarea[readonly] { background-color: #f8fafc !important; cursor: default; }
+
         .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
@@ -81,8 +93,13 @@
             </div>
 
             <!-- 工具按鈕 -->
-            <div class="flex items-center space-x-2">
-                <button onclick="document.getElementById('import-file-input').click()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center space-x-1.5 shadow-sm">
+            <div class="flex flex-wrap items-center gap-2">
+                <span id="user-chip" class="text-xs text-slate-300 bg-slate-800 border border-slate-700 px-2.5 py-2 rounded-lg max-w-[14rem] truncate"></span>
+                <button onclick="window.api.logout()" class="need-member bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center space-x-1.5">
+                    <i class="fa-solid fa-right-from-bracket text-rose-400"></i>
+                    <span>登出</span>
+                </button>
+                <button onclick="document.getElementById('import-file-input').click()" class="need-admin bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center space-x-1.5 shadow-sm">
                     <i class="fa-solid fa-upload text-emerald-400"></i>
                     <span>匯入資料</span>
                 </button>
@@ -114,20 +131,96 @@
                     <i class="fa-solid fa-calculator"></i>
                     <span>4. 排程與用料試算</span>
                 </button>
+                <button onclick="switchTab('tab-members')" id="btn-tab-members" class="need-admin tab-btn flex-1 sm:flex-none flex items-center justify-center space-x-2 px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-300 hover:text-white hover:bg-slate-700/40 whitespace-nowrap transition">
+                    <i class="fa-solid fa-user-shield"></i>
+                    <span>5. 人員權限</span>
+                    <span id="request-count-badge" class="hidden bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full"></span>
+                </button>
             </div>
         </div>
     </header>
 
-    <!-- 雲端 API 尚未啟用提示橫幅 -->
-    <div id="api-warning-banner" class="hidden bg-amber-50 border-b border-amber-200 px-4 py-2.5 text-xs text-amber-900 no-print">
+    <!-- 無法連線雲端：唯讀模式提示 -->
+    <div id="offline-banner" class="hidden bg-amber-50 border-b border-amber-200 px-4 py-2.5 text-xs text-amber-900 no-print">
+        <div class="max-w-7xl mx-auto flex items-center space-x-2">
+            <i class="fa-solid fa-triangle-exclamation text-amber-600 text-sm"></i>
+            <span><strong>無法連線雲端服務</strong>，目前顯示這台裝置上次同步的資料（唯讀，無法修改）。網路恢復後請重新整理頁面。</span>
+        </div>
+    </div>
+
+    <!-- 舊版資料轉移提示（只有管理者會看到） -->
+    <div id="migration-banner" class="hidden bg-blue-50 border-b border-blue-200 px-4 py-3 text-sm text-blue-900 no-print">
         <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-center space-x-2">
-                <i class="fa-solid fa-triangle-exclamation text-amber-600 text-sm"></i>
-                <span><strong>提示：</strong>目前處於「本機保存模式」。若要開啟跨裝置雲端同步，請確認 Google Cloud API 已開通。</span>
+            <div>
+                <strong><i class="fa-solid fa-truck-ramp-box mr-1"></i>偵測到舊版系統的資料</strong>
+                <div class="text-xs text-blue-700 mt-0.5"><span id="migration-summary"></span>。轉移後舊資料仍會保留在雲端當備份。</div>
             </div>
-            <a href="https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=sunghsing" target="_blank" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded-lg font-semibold transition shrink-0">
-                前往檢查雲端 API <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i>
-            </a>
+            <div class="flex gap-2">
+                <button onclick="runMigration()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">一鍵轉移到新版</button>
+                <button onclick="if(confirm('確定不轉移舊資料？之後不會再提示。')) window.api.dismissMigration()" class="bg-white border border-blue-300 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-semibold">不需要</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 登入畫面（蓋在整個系統上面） ==================== -->
+    <div id="auth-screen" class="fixed inset-0 z-[60] bg-slate-100 flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm p-6 space-y-5">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600 p-2.5 rounded-xl"><i class="fa-solid fa-industry text-xl text-white"></i></div>
+                <div>
+                    <div class="font-bold text-slate-800">射出成型管理系統</div>
+                    <div class="text-xs text-slate-500">請登入以使用</div>
+                </div>
+            </div>
+
+            <!-- 載入中 -->
+            <div id="auth-loading" class="text-center text-sm text-slate-500 py-6">
+                <i class="fa-solid fa-spinner fa-spin mr-1.5"></i>連線中…
+            </div>
+
+            <!-- 登入 / 註冊 -->
+            <form id="auth-login" class="hidden space-y-3" onsubmit="authSubmit(event)">
+                <div id="auth-name-row" class="hidden">
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">姓名（給管理者辨識）</label>
+                    <input type="text" id="auth-name" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Email</label>
+                    <input type="email" id="auth-email" required autocomplete="username" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">密碼</label>
+                    <input type="password" id="auth-password" required minlength="6" autocomplete="current-password" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <button type="submit" id="auth-submit-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl text-sm">登入</button>
+                <div class="flex justify-between text-xs">
+                    <button type="button" id="auth-toggle-btn" onclick="toggleRegister()" class="text-blue-600 hover:underline">第一次使用？註冊帳號</button>
+                    <button type="button" onclick="authReset()" class="text-slate-500 hover:underline">忘記密碼</button>
+                </div>
+            </form>
+
+            <!-- 等待信箱驗證 -->
+            <div id="auth-verify" class="hidden space-y-3 text-sm text-slate-700">
+                <p><i class="fa-solid fa-envelope-circle-check text-blue-600 mr-1"></i>驗證信已寄到 <strong class="auth-email-text"></strong>，請到信箱點連結完成驗證（找不到請看垃圾郵件）。</p>
+                <button onclick="authAction(() => window.api.recheck())" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl text-sm">我已完成驗證</button>
+                <div class="flex justify-between text-xs">
+                    <button onclick="authAction(() => window.api.resendVerification(), '已重新寄出驗證信')" class="text-blue-600 hover:underline">重寄驗證信</button>
+                    <button onclick="window.api.logout()" class="text-slate-500 hover:underline">換帳號登入</button>
+                </div>
+            </div>
+
+            <!-- 等待管理者開通 -->
+            <div id="auth-pending" class="hidden space-y-3 text-sm text-slate-700">
+                <p><i class="fa-solid fa-hourglass-half text-amber-500 mr-1"></i>帳號 <strong class="auth-email-text"></strong> 已送出開通申請，請通知管理者在「人員權限」核准。</p>
+                <p class="text-xs text-slate-500">核准後這個畫面會自動進入系統。</p>
+                <button onclick="window.api.logout()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 rounded-xl text-sm">換帳號登入</button>
+            </div>
+
+            <!-- 完全無法連線且無快取 -->
+            <div id="auth-offline" class="hidden space-y-3 text-sm text-slate-700">
+                <p><i class="fa-solid fa-wifi text-rose-500 mr-1"></i>無法連線到雲端服務，且這台裝置沒有可顯示的資料。請確認網路後重新整理。</p>
+                <button onclick="location.reload()" class="w-full bg-blue-600 text-white font-medium py-2.5 rounded-xl text-sm">重新整理</button>
+            </div>
         </div>
     </div>
 
@@ -144,7 +237,7 @@
                     </h2>
                     <p class="text-sm text-slate-500 mt-0.5">管理所有塑膠射出件的規格、穴數、重量與標準成型週期時間（Cycle Time）。</p>
                 </div>
-                <button onclick="openProductModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center justify-center space-x-2 shrink-0">
+                <button onclick="openProductModal()" class="need-editor bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center justify-center space-x-2 shrink-0">
                     <i class="fa-solid fa-plus"></i>
                     <span>新增產品資料</span>
                 </button>
@@ -180,14 +273,18 @@
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
                 <div class="flex-1 max-w-xl">
                     <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">選擇要查閱或設定成型條件的產品：</label>
-                    <select id="sop-product-select" onchange="loadSopForSelectedProduct()" class="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    <select id="sop-product-select" onchange="onSopProductChange()" class="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
                         <!-- 動態填入 -->
                     </select>
                 </div>
                 <div class="flex flex-wrap items-center gap-2.5">
-                    <button onclick="saveSopData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center space-x-2">
+                    <button onclick="saveSopData()" class="need-editor bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center space-x-2">
                         <i class="fa-solid fa-cloud-arrow-up"></i>
-                        <span>儲存成型條件至雲端</span>
+                        <span>儲存成型條件</span>
+                    </button>
+                    <button onclick="openSopHistory()" class="need-member bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center space-x-2">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                        <span>修改紀錄</span>
                     </button>
                     <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center space-x-2">
                         <i class="fa-solid fa-print"></i>
@@ -205,6 +302,7 @@
                             <span id="sop-card-partno" class="text-sm font-mono font-bold text-blue-700"></span>
                         </div>
                         <h3 id="sop-card-partname" class="text-xl font-bold text-slate-900 mt-1">請選擇產品</h3>
+                        <div id="sop-card-updated" class="text-[11px] text-slate-500 mt-0.5"></div>
                     </div>
                     <div class="text-xs sm:text-right text-slate-600 space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-200">
                         <div><span class="font-semibold">使用塑料：</span><span id="sop-card-material">--</span></div>
@@ -374,7 +472,7 @@
 
         <!-- ==================== 模組三：產程結案紀錄表 ==================== -->
         <section id="tab-logs" class="tab-content hidden space-y-6">
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
+            <div class="need-member bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
                 <div class="mb-4">
                     <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
                         <i class="fa-solid fa-pen-to-square text-blue-600"></i>
@@ -488,7 +586,8 @@
                                 <th class="py-3 px-4 font-semibold text-center">生產良率</th>
                                 <th class="py-3 px-4 font-semibold text-center">產能達成率</th>
                                 <th class="py-3 px-4 font-semibold">產程與備註原因</th>
-                                <th class="py-3 px-4 font-semibold text-center">刪除</th>
+                                <th class="py-3 px-4 font-semibold">登記人</th>
+                                <th class="need-editor py-3 px-4 font-semibold text-center">刪除</th>
                             </tr>
                         </thead>
                         <tbody id="log-table-body" class="divide-y divide-slate-200 text-sm">
@@ -646,10 +745,65 @@
             </div>
         </section>
 
+        <!-- ==================== 模組五：人員權限（僅管理者） ==================== -->
+        <section id="tab-members" class="tab-content hidden space-y-6 need-admin">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
+                <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-user-shield text-blue-600"></i>人員權限管理
+                </h2>
+                <div class="text-xs text-slate-500 mt-1 space-y-0.5">
+                    <div><strong>管理者</strong>：全部功能，含人員權限、匯入備份</div>
+                    <div><strong>技術員</strong>：新增/修改產品與成型條件、登記與刪除產程紀錄</div>
+                    <div><strong>作業員</strong>：查看全部資料、登記產程紀錄（不能修改條件與產品）</div>
+                </div>
+            </div>
+
+            <!-- 待開通申請 -->
+            <div class="bg-white rounded-2xl shadow-sm border border-amber-200 overflow-hidden">
+                <div class="p-4 bg-amber-50 border-b border-amber-200 font-bold text-sm text-amber-900">
+                    <i class="fa-solid fa-bell mr-1"></i>待開通申請
+                </div>
+                <div id="request-list" class="divide-y divide-slate-200 text-sm"></div>
+            </div>
+
+            <!-- 已開通成員 -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                <div class="p-4 bg-slate-50 border-b border-slate-200 font-bold text-sm text-slate-800">
+                    <i class="fa-solid fa-users mr-1"></i>已開通成員
+                </div>
+                <div id="member-list" class="divide-y divide-slate-200 text-sm"></div>
+                <form onsubmit="addMemberManually(event)" class="p-4 bg-slate-50 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-2">
+                    <input type="email" id="new-member-email" required placeholder="Email" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none sm:col-span-2">
+                    <input type="text" id="new-member-name" placeholder="姓名" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none">
+                    <div class="flex gap-2">
+                        <select id="new-member-role" class="flex-1 bg-white border border-slate-300 rounded-lg px-2 py-2 text-sm">
+                            <option value="operator">作業員</option>
+                            <option value="editor">技術員</option>
+                            <option value="admin">管理者</option>
+                        </select>
+                        <button type="submit" class="bg-blue-600 text-white px-3 rounded-lg text-sm font-medium">預先開通</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
     </main>
 
+    <!-- SOP 修改紀錄 Modal -->
+    <div id="history-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-xl border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 p-5">
+                <h3 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-clock-rotate-left text-indigo-600 mr-1"></i>成型條件修改紀錄</h3>
+                <button onclick="document.getElementById('history-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div id="history-list" class="overflow-y-auto p-5 space-y-3 text-sm"></div>
+        </div>
+    </div>
+
     <!-- 產品 Modal -->
-    <div id="product-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+    <div id="product-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 space-y-5">
             <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 id="modal-title" class="text-lg font-bold text-slate-800">新增產品與模具資料</h3>
@@ -711,11 +865,12 @@
         <span id="toast-text">操作成功</span>
     </div>
 
-    <!-- Firebase 9 SDK 初始化與即時同步 (專屬專案 sunghsing) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
-
+        <script type="module">
+        // =====================================================================
+        //  雲端層：登入 (Firebase Auth) + 資料庫 (Firestore)
+        //  畫面邏輯在下方另一個 <script>，它只透過 window.api 讀寫資料
+        // =====================================================================
+        const FB_VER = '9.22.1';
         const firebaseConfig = {
             apiKey: "AIzaSyDqFzF8L3N1-gxmycxJc8Y4FFQKXiNN2ds",
             authDomain: "sunghsing.firebaseapp.com",
@@ -726,117 +881,440 @@
             appId: "1:12105900713:web:c747d7d6a82f754b90ffb8",
             measurementId: "G-CQNZHLEVHD"
         };
+        const CACHE_KEY = 'INJECTION_MOLDING_APP_CACHE_V3';   // 本機快取（無法連線時唯讀顯示用）
+        const LEGACY_KEY = 'INJECTION_MOLDING_APP_DATA_V1';   // 舊版本機資料
 
-        const LOCAL_STORAGE_KEY = 'INJECTION_MOLDING_APP_DATA_V1';
+        window.ROLE_LABEL = { admin: '管理者', editor: '技術員', operator: '作業員' };
+        window.appData = { products: [], sops: {}, logs: [] };
+        window.membersData = [];
+        window.accessRequests = [];
+        window.currentUser = null;   // { email, name, role }
 
-        // 預設示範資料
-        const fallbackData = {
-            products: [
-                { id: 'p1', code: 'INJ-A101', name: '控制器防水前蓋', material: 'ABS (奇美 PA-757)', cavities: 2, partWeight: 24.5, runnerWeight: 7.0, cycleTime: 30 },
-                { id: 'p2', code: 'INJ-B205', name: '高強度耐衝擊扣具', material: 'PP (台塑 1120)', cavities: 4, partWeight: 8.2, runnerWeight: 5.2, cycleTime: 20 }
-            ],
-            sops: {
-                'p1': { tempNozzle: 215, tempZ1: 220, tempZ2: 215, tempZ3: 205, tempZ4: 195, tempMold: '55 / 50', dryTemp: 85, dryTime: 3, injP1: 75, injP2: 65, injP3: 50, injS1: 45, injS2: 60, injS3: 30, injPos1: 42, injPos2: 25, injPos3: 10, injTime: 2.2, holdPressure: 45, holdTime: 3.5, vpSwitch: 10, meteringStroke: 58, suckBack: 3.0, backPressure: 8, coolingTime: 18, openStroke: 180, ejector: '40mm / 2次', notes: '' },
-                'p2': { tempNozzle: 200, tempZ1: 205, tempZ2: 200, tempZ3: 190, tempZ4: 180, tempMold: '40 / 40', dryTemp: 80, dryTime: 2, injP1: 65, injP2: 60, injP3: 45, injS1: 50, injS2: 65, injS3: 35, injPos1: 35, injPos2: 18, injPos3: 8, injTime: 1.5, holdPressure: 40, holdTime: 2.5, vpSwitch: 8, meteringStroke: 45, suckBack: 2.5, backPressure: 6, coolingTime: 12, openStroke: 140, ejector: '30mm / 1次', notes: '' }
-            },
-            logs: []
-        };
+        let fa = null, fs = null, auth = null, db = null;
+        let unsubs = [];
+        let memberUnsub = null;
+        const syncMeta = {};         // 每個監聽器最後一次的同步狀態
 
-        // 1. 本地讀取先行
-        try {
-            const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0) {
-                    window.appData = parsed;
-                }
+        const $ = (id) => document.getElementById(id);
+        const emailKey = (email) => String(email || '').trim().toLowerCase();
+
+        // ---------- 畫面切換：loading / login / verify / pending / offline / app ----------
+        function showScreen(name, info = {}) {
+            const screen = $('auth-screen');
+            ['auth-loading', 'auth-login', 'auth-verify', 'auth-pending', 'auth-offline'].forEach(id => $(id).classList.add('hidden'));
+            if (name === 'app') {
+                screen.classList.add('hidden');
+                return;
             }
-        } catch(e) {}
-
-        if (!window.appData) {
-            window.appData = JSON.parse(JSON.stringify(fallbackData));
+            screen.classList.remove('hidden');
+            $('auth-' + name).classList.remove('hidden');
+            document.querySelectorAll('.auth-email-text').forEach(el => el.textContent = info.email || '');
         }
 
-        // 2. 初始化 Firebase
-        let db = null;
-        try {
-            setLogLevel('silent');
-            const app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            
-            // 立即監聽 Firestore 上的真實資料庫
-            const docRef = doc(db, "factory_system", "main_data");
-            onSnapshot(docRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const cloudData = docSnap.data();
-                    // 只要雲端有資料，立刻載入！
-                    if (cloudData && Array.isArray(cloudData.products) && cloudData.products.length > 0) {
-                        window.appData = {
-                            products: cloudData.products,
-                            sops: cloudData.sops || {},
-                            logs: cloudData.logs || []
-                        };
-                        try {
-                            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(window.appData));
-                        } catch(e) {}
-                        if (typeof window.refreshAllViews === 'function') {
-                            window.refreshAllViews();
-                        }
-                    }
-                }
-                updateStatusBadge(true);
-            }, (err) => {
-                console.warn("Firestore 連線警告:", err);
-                updateStatusBadge(false, true);
+        function setRole(role) {
+            document.body.dataset.role = role || '';
+            const canEditSop = role === 'admin' || role === 'editor';
+            document.querySelectorAll('#printable-sop-card input, #printable-sop-card textarea').forEach(el => {
+                el.readOnly = !canEditSop;
             });
-        } catch (e) {
-            updateStatusBadge(false);
-        }
-
-        function updateStatusBadge(connected, showBanner = false) {
-            const el = document.getElementById('sync-status-indicator');
-            const banner = document.getElementById('api-warning-banner');
-            if (!el) return;
-
-            if (connected) {
-                el.className = "inline-flex items-center text-xs font-semibold text-emerald-400";
-                el.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>雲端已連線 (即時同步)';
-                if (banner) banner.classList.add('hidden');
-            } else {
-                el.className = "inline-flex items-center text-xs font-semibold text-amber-400";
-                el.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 mr-1.5"></span>本機保存模式';
-                if (banner && showBanner) banner.classList.remove('hidden');
+            const chip = $('user-chip');
+            if (window.currentUser && chip) {
+                chip.textContent = `${window.currentUser.name || window.currentUser.email}（${window.ROLE_LABEL[role] || '唯讀'}）`;
             }
         }
 
-        window.saveData = async function() {
+        // ---------- 同步狀態燈 ----------
+        function updateSyncBadge() {
+            const el = $('sync-status-indicator');
+            const metas = Object.values(syncMeta);
+            let color = 'emerald', text = '雲端已同步', pulse = 'animate-pulse';
+            if (!db) { color = 'amber'; text = '唯讀（無法連線雲端）'; pulse = ''; }
+            else if (metas.some(m => m.hasPendingWrites)) { color = 'sky'; text = '同步中…'; }
+            else if (metas.some(m => m.fromCache)) { color = 'amber'; text = '離線中（修改會在連線後自動上傳）'; pulse = ''; }
+            el.className = `inline-flex items-center text-xs font-semibold text-${color}-400`;
+            el.innerHTML = `<span class="w-2 h-2 rounded-full bg-${color}-400 mr-1.5 ${pulse}"></span>${text}`;
+        }
+
+        // 多個監聽器可能同時回報，合併成一次重繪
+        let refreshTimer = null;
+        function scheduleRefresh() {
+            clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+                if (typeof window.refreshAllViews === 'function') window.refreshAllViews();
+                try { localStorage.setItem(CACHE_KEY, JSON.stringify(window.appData)); } catch (e) {}
+            }, 60);
+        }
+
+        function listen(key, ref, onData) {
+            const unsub = fs.onSnapshot(ref, { includeMetadataChanges: true }, (snap) => {
+                syncMeta[key] = { fromCache: snap.metadata.fromCache, hasPendingWrites: snap.metadata.hasPendingWrites };
+                updateSyncBadge();
+                onData(snap);
+                scheduleRefresh();
+            }, (err) => {
+                console.warn(`監聽 ${key} 失敗:`, err);
+                window.showToast(errMsg(err));
+            });
+            unsubs.push(unsub);
+        }
+
+        function stopListeners() {
+            unsubs.forEach(u => u());
+            unsubs = [];
+            Object.keys(syncMeta).forEach(k => delete syncMeta[k]);
+        }
+
+        function startDataListeners() {
+            stopListeners();
+            listen('products', fs.collection(db, 'products'), snap => {
+                window.appData.products = snap.docs.map(d => ({ ...d.data(), id: d.id }))
+                    .sort((a, b) => String(a.code).localeCompare(String(b.code)));
+            });
+            listen('sops', fs.collection(db, 'sops'), snap => {
+                const sops = {};
+                snap.docs.forEach(d => { sops[d.id] = d.data(); });
+                window.appData.sops = sops;
+            });
+            listen('logs', fs.collection(db, 'logs'), snap => {
+                window.appData.logs = snap.docs.map(d => ({ ...d.data(), id: d.id }))
+                    .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
+            });
+            if (window.currentUser.role === 'admin') {
+                listen('members', fs.collection(db, 'members'), snap => {
+                    window.membersData = snap.docs.map(d => ({ ...d.data(), email: d.id }));
+                });
+                listen('requests', fs.collection(db, 'accessRequests'), snap => {
+                    window.accessRequests = snap.docs.map(d => ({ ...d.data(), email: d.id }));
+                });
+                checkLegacyData();
+            }
+        }
+
+        // ---------- 錯誤訊息翻譯 ----------
+        function errMsg(e) {
+            const code = e?.code || '';
+            const map = {
+                'permission-denied': '權限不足：您的帳號無法執行此操作',
+                'auth/invalid-email': 'Email 格式不正確',
+                'auth/user-not-found': '帳號或密碼錯誤',
+                'auth/wrong-password': '帳號或密碼錯誤',
+                'auth/invalid-credential': '帳號或密碼錯誤',
+                'auth/invalid-login-credentials': '帳號或密碼錯誤',
+                'auth/email-already-in-use': '此 Email 已註冊，請直接登入',
+                'auth/weak-password': '密碼至少需 6 個字元',
+                'auth/too-many-requests': '嘗試次數過多，請稍後再試',
+                'auth/network-request-failed': '網路連線失敗',
+                'auth/operation-not-allowed': '尚未在 Firebase 啟用「電子郵件/密碼」登入'
+            };
+            return map[code] || `操作失敗（${code || e?.message || '未知錯誤'}）`;
+        }
+
+        // 寫入不等伺服器回應（離線時會一直等），失敗才提示
+        function bg(promise) {
+            promise.catch(e => { console.warn(e); window.showToast(errMsg(e)); });
+        }
+
+        // 批次寫入（Firestore 一個 batch 最多 500 筆，這裡每 400 筆一批）
+        async function commitInChunks(ops) {
+            for (let i = 0; i < ops.length; i += 400) {
+                const batch = fs.writeBatch(db);
+                ops.slice(i, i + 400).forEach(op => op.type === 'delete' ? batch.delete(op.ref) : batch.set(op.ref, op.data));
+                await batch.commit();
+            }
+        }
+
+        function stamp() {
+            return { updatedAt: new Date().toISOString(), updatedBy: window.currentUser?.email || '' };
+        }
+
+        function stripId(obj) {
+            const { id, ...rest } = obj;
+            return rest;
+        }
+
+        // ---------- 舊版資料轉移 ----------
+        // 舊版資料來源：雲端的 factory_system/main_data，或這台裝置瀏覽器裡的舊版本機資料
+        // （舊版與 v3 放在同一個網域，所以同一台裝置的同一個瀏覽器讀得到舊版存的資料）
+        function readLocalLegacy() {
             try {
-                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(window.appData));
-            } catch (e) {}
-
-            if (db) {
-                try {
-                    await setDoc(doc(db, "factory_system", "main_data"), window.appData);
-                    updateStatusBadge(true);
-                } catch (e) {
-                    updateStatusBadge(false, true);
+                const d = JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null');
+                return (d && Array.isArray(d.products) && d.products.length > 0) ? d : null;
+            } catch (e) { return null; }
+        }
+        async function loadLegacy() {
+            try {
+                const legacy = await fs.getDoc(fs.doc(db, 'factory_system', 'main_data'));
+                if (legacy.exists()) return { data: legacy.data(), source: '雲端' };
+            } catch (e) { console.warn('讀取雲端舊資料失敗:', e); }
+            const local = readLocalLegacy();
+            return local ? { data: local, source: '這台裝置' } : null;
+        }
+        async function checkLegacyData() {
+            try {
+                const [legacy, marker] = await Promise.all([
+                    loadLegacy(),
+                    fs.getDoc(fs.doc(db, 'meta', 'migration'))
+                ]);
+                const show = !!legacy && !(marker.exists() && marker.data().done);
+                $('migration-banner').classList.toggle('hidden', !show);
+                if (show) {
+                    const d = legacy.data;
+                    $('migration-summary').textContent = `${legacy.source}上的舊資料：產品 ${(d.products || []).length} 項、產程紀錄 ${(d.logs || []).length} 筆`;
                 }
+            } catch (e) {
+                console.warn('檢查舊資料失敗:', e);
             }
+        }
+
+        // ---------- 對外 API（給畫面邏輯呼叫） ----------
+        window.api = {
+            errMsg,
+            // 帳號
+            async signIn(email, password) { await fa.signInWithEmailAndPassword(auth, email.trim(), password); },
+            async register(email, password, name) {
+                const cred = await fa.createUserWithEmailAndPassword(auth, email.trim(), password);
+                if (name) await fa.updateProfile(cred.user, { displayName: name.trim() });
+                await fa.sendEmailVerification(cred.user);
+            },
+            async resetPassword(email) { await fa.sendPasswordResetEmail(auth, email.trim()); },
+            async resendVerification() { await fa.sendEmailVerification(auth.currentUser); },
+            async recheck() {
+                if (!auth.currentUser) return;
+                await auth.currentUser.reload();
+                await auth.currentUser.getIdToken(true);   // 取得含「已驗證」的新憑證
+                handleUser(auth.currentUser);
+            },
+            async logout() {
+                try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
+                await fa.signOut(auth);
+            },
+
+            // 產品
+            saveProduct(p) { bg(fs.setDoc(fs.doc(db, 'products', p.id), { ...stripId(p), ...stamp() })); },
+            deleteProduct(id) {
+                const batch = fs.writeBatch(db);
+                batch.delete(fs.doc(db, 'products', id));
+                batch.delete(fs.doc(db, 'sops', id));
+                bg(batch.commit());
+            },
+
+            // SOP：同時寫一份到 history，作為版本紀錄
+            saveSop(productId, sop) {
+                const data = { ...sop, ...stamp() };
+                const batch = fs.writeBatch(db);
+                batch.set(fs.doc(db, 'sops', productId), data);
+                batch.set(fs.doc(fs.collection(db, 'sops', productId, 'history')), data);
+                bg(batch.commit());
+            },
+            async loadSopHistory(productId) {
+                const q = fs.query(fs.collection(db, 'sops', productId, 'history'), fs.orderBy('updatedAt', 'desc'), fs.limit(30));
+                const snap = await fs.getDocs(q);
+                return snap.docs.map(d => ({ ...d.data(), id: d.id }));
+            },
+
+            // 產程紀錄
+            addLog(log) { bg(fs.setDoc(fs.doc(db, 'logs', log.id), stripId(log))); },
+            deleteLog(id) { bg(fs.deleteDoc(fs.doc(db, 'logs', id))); },
+
+            // 匯入備份（整份覆蓋）
+            async importAll(data) {
+                const ops = [];
+                const keepP = new Set(data.products.map(p => p.id));
+                const keepL = new Set(data.logs.map(l => l.id));
+                window.appData.products.filter(p => !keepP.has(p.id)).forEach(p => {
+                    ops.push({ type: 'delete', ref: fs.doc(db, 'products', p.id) });
+                    ops.push({ type: 'delete', ref: fs.doc(db, 'sops', p.id) });
+                });
+                window.appData.logs.filter(l => !keepL.has(l.id)).forEach(l => ops.push({ type: 'delete', ref: fs.doc(db, 'logs', l.id) }));
+                data.products.forEach(p => ops.push({ type: 'set', ref: fs.doc(db, 'products', p.id), data: stripId(p) }));
+                Object.entries(data.sops).forEach(([id, s]) => ops.push({ type: 'set', ref: fs.doc(db, 'sops', id), data: s }));
+                data.logs.forEach(l => ops.push({ type: 'set', ref: fs.doc(db, 'logs', l.id), data: stripId(l) }));
+                await commitInChunks(ops);
+            },
+
+            // 一鍵轉移舊版單一文件 → 新結構（舊文件保留不刪，當作備份）
+            async migrateLegacy() {
+                const legacy = await loadLegacy();
+                if (!legacy) throw new Error('找不到舊資料');
+                const d = legacy.data;
+                const ops = [];
+                (d.products || []).forEach(p => ops.push({ type: 'set', ref: fs.doc(db, 'products', p.id), data: stripId(p) }));
+                Object.entries(d.sops || {}).forEach(([id, s]) => {
+                    // 舊版 SOP 數值存成字串，順便轉成數字
+                    const clean = {};
+                    Object.entries(s).forEach(([k, v]) => {
+                        clean[k] = (typeof v === 'string' && v.trim() !== '' && !isNaN(v) && !['tempMold', 'ejector', 'notes'].includes(k)) ? parseFloat(v) : v;
+                    });
+                    ops.push({ type: 'set', ref: fs.doc(db, 'sops', id), data: clean });
+                });
+                (d.logs || []).forEach(l => {
+                    const p = (d.products || []).find(x => x.id === l.productId);
+                    ops.push({
+                        type: 'set', ref: fs.doc(db, 'logs', l.id), data: {
+                            ...stripId(l),
+                            productCode: l.productCode ?? p?.code ?? '',
+                            productName: l.productName ?? p?.name ?? '',
+                            cycleTime: l.cycleTime ?? p?.cycleTime ?? null,
+                            cavities: l.cavities ?? p?.cavities ?? null
+                        }
+                    });
+                });
+                ops.push({ type: 'set', ref: fs.doc(db, 'meta', 'migration'), data: { done: true, ...stamp() } });
+                await commitInChunks(ops);
+                $('migration-banner').classList.add('hidden');
+                return { products: (d.products || []).length, logs: (d.logs || []).length };
+            },
+            dismissMigration() {
+                bg(fs.setDoc(fs.doc(db, 'meta', 'migration'), { done: true, skipped: true, ...stamp() }));
+                $('migration-banner').classList.add('hidden');
+            },
+
+            // 人員權限
+            setMember(email, role, name) {
+                bg(fs.setDoc(fs.doc(db, 'members', emailKey(email)), { role, name: name || '', ...stamp() }));
+            },
+            removeMember(email) { bg(fs.deleteDoc(fs.doc(db, 'members', emailKey(email)))); },
+            approveRequest(email, role, name) {
+                const batch = fs.writeBatch(db);
+                batch.set(fs.doc(db, 'members', emailKey(email)), { role, name: name || '', ...stamp() });
+                batch.delete(fs.doc(db, 'accessRequests', emailKey(email)));
+                bg(batch.commit());
+            },
+            rejectRequest(email) { bg(fs.deleteDoc(fs.doc(db, 'accessRequests', emailKey(email)))); }
         };
+
+        // ---------- 登入狀態變化 ----------
+        function handleUser(user) {
+            if (memberUnsub) { memberUnsub(); memberUnsub = null; }
+            stopListeners();
+            window.currentUser = null;
+            window.appData = { products: [], sops: {}, logs: [] };
+
+            if (!user) { setRole(''); showScreen('login'); return; }
+            if (!user.emailVerified) { showScreen('verify', { email: user.email }); return; }
+
+            const email = emailKey(user.email);
+            showScreen('loading');
+            // 監聽自己的權限文件：管理者改角色時立即生效
+            memberUnsub = fs.onSnapshot(fs.doc(db, 'members', email), (snap) => {
+                if (!snap.exists()) {
+                    stopListeners();
+                    window.currentUser = null;
+                    setRole('');
+                    // 自動送出開通申請，管理者會在「人員權限」看到
+                    bg(fs.setDoc(fs.doc(db, 'accessRequests', email), {
+                        name: user.displayName || '', requestedAt: new Date().toISOString()
+                    }));
+                    showScreen('pending', { email });
+                    return;
+                }
+                const m = snap.data();
+                const roleChanged = window.currentUser?.role !== m.role;
+                window.currentUser = { email, name: m.name || user.displayName || '', role: m.role };
+                setRole(m.role);
+                if (roleChanged) startDataListeners();
+                showScreen('app');
+            }, (err) => {
+                console.warn('讀取權限失敗:', err);
+                showScreen('pending', { email });
+            });
+        }
+
+        // ---------- 無法載入 Firebase：用本機快取唯讀顯示 ----------
+        function enterOfflineReadOnly() {
+            let cached = null;
+            try {
+                cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null') || JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null');
+            } catch (e) {}
+            if (cached && Array.isArray(cached.products)) {
+                window.appData = { products: cached.products, sops: cached.sops || {}, logs: cached.logs || [] };
+                window.currentUser = { email: '', name: '離線唯讀', role: 'readonly' };
+                setRole('readonly');
+                $('offline-banner').classList.remove('hidden');
+                updateSyncBadge();
+                showScreen('app');
+                scheduleRefresh();
+            } else {
+                showScreen('offline');
+            }
+        }
+
+        // ---------- 啟動 ----------
+        (async () => {
+            try {
+                const [appMod, authMod, fsMod] = await Promise.all([
+                    import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app.js`),
+                    import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-auth.js`),
+                    import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-firestore.js`)
+                ]);
+                fa = authMod;
+                fs = fsMod;
+                fs.setLogLevel('silent');
+                const app = appMod.initializeApp(firebaseConfig);
+                auth = fa.getAuth(app);
+                auth.languageCode = 'zh-TW';   // 驗證信、重設密碼信用中文
+                db = fs.getFirestore(app);
+                // 離線寫入存在 IndexedDB，關閉頁面後重新上線仍會送出
+                fs.enableIndexedDbPersistence(db).catch(err => console.warn('離線快取未啟用:', err.code));
+                fa.onAuthStateChanged(auth, handleUser);
+            } catch (e) {
+                console.warn('Firebase 載入失敗:', e);
+                enterOfflineReadOnly();
+            }
+        })();
 
         window.addEventListener('DOMContentLoaded', () => {
-            const dateInput = document.getElementById('log-date');
-            if (dateInput && !dateInput.value) {
-                dateInput.value = new Date().toISOString().slice(0, 10);
-            }
-            if (typeof window.refreshAllViews === 'function') {
-                window.refreshAllViews();
-            }
+            const dateInput = $('log-date');
+            if (dateInput && !dateInput.value) dateInput.value = window.todayLocal();
         });
     </script>
 
     <!-- 介面操作函數 -->
     <script>
+        // ===== 共用工具 =====
+        // HTML 跳脫：所有使用者輸入的文字放進 innerHTML 前都要經過這裡，避免 XSS / 引號破版
+        function esc(v) {
+            return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+        // 本地日期 (YYYY-MM-DD)。toISOString() 是 UTC，在台灣 00:00~08:00 會變成前一天
+        function todayLocal() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+        // CSV 欄位跳脫
+        function csvCell(v) {
+            return `"${String(v ?? '').replace(/"/g, '""')}"`;
+        }
+        // 標準產量：優先用紀錄當下快照的週期/穴數，避免日後修改產品規格回頭改寫歷史達成率
+        function logStdQty(log, product) {
+            const ct = log.cycleTime ?? product?.cycleTime;
+            const cav = log.cavities ?? product?.cavities;
+            if (!ct || !cav) return 0;
+            return Math.round((3600 / ct) * cav * log.hours);
+        }
+
+        // SOP 欄位對照表（DOM id ↔ 資料鍵），載入與儲存共用同一份，避免兩邊漏改
+        const SOP_FIELDS = [
+            ['sop-temp-nozzle', 'tempNozzle'], ['sop-temp-z1', 'tempZ1'], ['sop-temp-z2', 'tempZ2'],
+            ['sop-temp-z3', 'tempZ3'], ['sop-temp-z4', 'tempZ4'], ['sop-temp-mold', 'tempMold'],
+            ['sop-dry-temp', 'dryTemp'], ['sop-dry-time', 'dryTime'],
+            ['sop-inj-p1', 'injP1'], ['sop-inj-p2', 'injP2'], ['sop-inj-p3', 'injP3'],
+            ['sop-inj-s1', 'injS1'], ['sop-inj-s2', 'injS2'], ['sop-inj-s3', 'injS3'],
+            ['sop-inj-pos1', 'injPos1'], ['sop-inj-pos2', 'injPos2'], ['sop-inj-pos3', 'injPos3'],
+            ['sop-inj-time', 'injTime'],
+            ['sop-hold-pressure', 'holdPressure'], ['sop-hold-time', 'holdTime'], ['sop-vp-switch', 'vpSwitch'],
+            ['sop-metering-stroke', 'meteringStroke'], ['sop-suck-back', 'suckBack'], ['sop-back-pressure', 'backPressure'],
+            ['sop-cooling-time', 'coolingTime'], ['sop-open-stroke', 'openStroke'], ['sop-ejector', 'ejector'],
+            ['sop-notes', 'notes']
+        ];
+
+        // SOP 表單是否有未儲存的修改（防止其他裝置同步時把正在輸入的內容蓋掉）
+        let sopDirty = false;
+        let sopLoadedProductId = null;
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('printable-sop-card').addEventListener('input', () => { sopDirty = true; });
+        });
+
         function showToast(message) {
             const toast = document.getElementById('toast-msg');
             document.getElementById('toast-text').textContent = message;
@@ -863,6 +1341,9 @@
         function renderProducts() {
             const tbody = document.getElementById('product-table-body');
             tbody.innerHTML = '';
+            if (window.appData.products.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400 text-sm">尚無產品資料</td></tr>';
+            }
 
             window.appData.products.forEach(p => {
                 const totalShotWeight = (p.partWeight * p.cavities + p.runnerWeight).toFixed(1);
@@ -872,11 +1353,11 @@
                 tr.className = 'hover:bg-slate-50/80 transition';
                 tr.innerHTML = `
                     <td class="py-3.5 px-4">
-                        <div class="font-bold text-slate-800">${p.name}</div>
-                        <div class="text-xs font-mono text-blue-600">${p.code}</div>
+                        <div class="font-bold text-slate-800">${esc(p.name)}</div>
+                        <div class="text-xs font-mono text-blue-600">${esc(p.code)}</div>
                     </td>
                     <td class="py-3.5 px-4">
-                        <span class="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-xs font-medium border border-slate-200">${p.material}</span>
+                        <span class="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-xs font-medium border border-slate-200">${esc(p.material)}</span>
                     </td>
                     <td class="py-3.5 px-4 text-center font-semibold text-slate-700">${p.cavities} 穴</td>
                     <td class="py-3.5 px-4 text-right font-mono">${p.partWeight.toFixed(1)} g</td>
@@ -887,13 +1368,13 @@
                     </td>
                     <td class="py-3.5 px-4 text-right font-bold text-emerald-700">${hourlyOutput.toLocaleString()} pcs</td>
                     <td class="py-3.5 px-4 text-center space-x-1">
-                        <button onclick="viewProductSop('${p.id}')" title="查看/編輯成型條件" class="text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-lg transition">
+                        <button onclick="viewProductSop('${esc(p.id)}')" title="查看/編輯成型條件" class="text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-lg transition">
                             <i class="fa-solid fa-sliders"></i>
                         </button>
-                        <button onclick="openProductModal('${p.id}')" title="編輯規格" class="text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition">
+                        <button onclick="openProductModal('${esc(p.id)}')" title="編輯規格" class="need-editor text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition">
                             <i class="fa-solid fa-pen"></i>
                         </button>
-                        <button onclick="deleteProduct('${p.id}')" title="刪除產品" class="text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg transition">
+                        <button onclick="deleteProduct('${esc(p.id)}')" title="刪除產品" class="need-editor text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg transition">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </td>
@@ -904,6 +1385,7 @@
             populateProductDropdowns();
         }
 
+        // 只重建下拉選單；各模組的重算交給 refreshAllViews（原版這裡會重複算兩次）
         function populateProductDropdowns() {
             const selects = ['sop-product-select', 'log-product-select', 'calc-product-select'];
             selects.forEach(selectId => {
@@ -933,10 +1415,6 @@
                 });
                 if (prevFilter) filterSelect.value = prevFilter;
             }
-
-            loadSopForSelectedProduct();
-            updateLogStandardPreview();
-            runScheduleCalc();
         }
 
         function openProductModal(productId = null) {
@@ -966,11 +1444,25 @@
             document.getElementById('product-modal').classList.add('hidden');
         }
 
-        async function saveProduct(e) {
+        // 新產品的預設成型條件（只是起始值，請依實際機台調整）
+        const DEFAULT_SOP = {
+            tempNozzle: 205, tempZ1: 210, tempZ2: 205, tempZ3: 195, tempZ4: 185,
+            tempMold: '50 / 50', dryTemp: 80, dryTime: 3,
+            injP1: 70, injP2: 60, injP3: 45,
+            injS1: 50, injS2: 60, injS3: 35,
+            injPos1: 40, injPos2: 20, injPos3: 8,
+            injTime: 2.0,
+            holdPressure: 40, holdTime: 3.0, vpSwitch: 8,
+            meteringStroke: 50, suckBack: 2.5, backPressure: 6,
+            coolingTime: 15, openStroke: 150, ejector: '35mm / 1次',
+            notes: ''
+        };
+
+        function saveProduct(e) {
             e.preventDefault();
             const editId = document.getElementById('prod-id').value;
             const id = editId || 'p_' + Date.now();
-            
+
             const product = {
                 id: id,
                 code: document.getElementById('prod-code').value.trim(),
@@ -979,58 +1471,88 @@
                 cavities: parseInt(document.getElementById('prod-cavities').value, 10) || 1,
                 partWeight: parseFloat(document.getElementById('prod-part-weight').value) || 0,
                 runnerWeight: parseFloat(document.getElementById('prod-runner-weight').value) || 0,
-                cycleTime: parseFloat(document.getElementById('prod-cycle-time').value) || 10
+                cycleTime: parseFloat(document.getElementById('prod-cycle-time').value) || 0
             };
 
-            const existingIndex = window.appData.products.findIndex(p => p.id === id);
-            if (existingIndex >= 0) {
-                window.appData.products[existingIndex] = product;
-            } else {
-                window.appData.products.push(product);
-                if (!window.appData.sops[id]) {
-                    window.appData.sops[id] = {
-                        tempNozzle: 205, tempZ1: 210, tempZ2: 205, tempZ3: 195, tempZ4: 185,
-                        tempMold: '50 / 50', dryTemp: 80, dryTime: 3,
-                        injP1: 70, injP2: 60, injP3: 45,
-                        injS1: 50, injS2: 60, injS3: 35,
-                        injPos1: 40, injPos2: 20, injPos3: 8,
-                        injTime: 2.0,
-                        holdPressure: 40, holdTime: 3.0, vpSwitch: 8,
-                        meteringStroke: 50, suckBack: 2.5, backPressure: 6,
-                        coolingTime: 15, openStroke: 150, ejector: '35mm / 1次',
-                        notes: ''
-                    };
-                }
-            }
-
-            await window.saveData();
-            refreshAllViews();
-            closeProductModal();
-            showToast('產品資料已儲存並同步！');
-        }
-
-        async function deleteProduct(productId) {
-            if (window.appData.products.length <= 1) {
-                showToast('系統至少需保留一項產品資料');
+            if (!(product.cycleTime > 0) || !(product.partWeight > 0) || product.cavities < 1) {
+                showToast('週期時間、單件重需大於 0，穴數至少 1');
                 return;
             }
-            window.appData.products = window.appData.products.filter(p => p.id !== productId);
-            delete window.appData.sops[productId];
-            await window.saveData();
-            refreshAllViews();
-            showToast('產品資料已刪除並同步');
+            if (window.appData.products.some(p => p.id !== id && p.code === product.code)) {
+                showToast(`料號 ${product.code} 已存在`);
+                return;
+            }
+
+            window.api.saveProduct(product);
+            if (!editId && !window.appData.sops[id]) {
+                window.api.saveSop(id, { ...DEFAULT_SOP });
+            }
+            closeProductModal();
+            showToast('產品資料已儲存');
+        }
+
+        function deleteProduct(productId) {
+            const p = window.appData.products.find(x => x.id === productId);
+            const logCount = window.appData.logs.filter(l => l.productId === productId).length;
+            if (!confirm(`確定刪除「${p?.name}」？\n其成型條件 SOP 會一併刪除${logCount ? `；${logCount} 筆歷史紀錄會保留並標示為已刪除產品` : ''}。`)) return;
+            window.api.deleteProduct(productId);
+            showToast('產品資料已刪除');
         }
 
         function viewProductSop(productId) {
             switchTab('tab-sop');
             document.getElementById('sop-product-select').value = productId;
+            onSopProductChange();
+        }
+
+        // 使用者切換 SOP 產品：若有未儲存修改先確認
+        function onSopProductChange() {
+            const sel = document.getElementById('sop-product-select');
+            if (sopDirty && sopLoadedProductId && sel.value !== sopLoadedProductId) {
+                if (!confirm('目前的成型條件尚未儲存，切換產品會放棄修改，確定嗎？')) {
+                    sel.value = sopLoadedProductId;
+                    return;
+                }
+            }
+            sopDirty = false;
             loadSopForSelectedProduct();
         }
+
+        function fmtTime(iso) {
+            if (!iso) return '';
+            const d = new Date(iso);
+            return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function memberName(email) {
+            const m = (window.membersData || []).find(x => x.email === email);
+            return m?.name || email || '';
+        }
+
+        let sopLoadedVersion = null;
+        let sopConflictWarned = false;
 
         function loadSopForSelectedProduct() {
             const prodId = document.getElementById('sop-product-select').value;
             const product = window.appData.products.find(x => x.id === prodId);
-            if (!product) return;
+            if (!product) {
+                document.getElementById('sop-card-partno').textContent = '';
+                document.getElementById('sop-card-partname').textContent = '請先新增產品';
+                return;
+            }
+            const sop = window.appData.sops[prodId] || {};
+
+            // 同步觸發的重繪：正在編輯同一產品時，不覆蓋使用者輸入中的欄位
+            if (sopDirty && prodId === sopLoadedProductId) {
+                if (sop.updatedAt !== sopLoadedVersion && !sopConflictWarned) {
+                    sopConflictWarned = true;
+                    alert(`注意：${memberName(sop.updatedBy)} 剛剛修改了這個產品的成型條件。\n您畫面上尚未儲存的內容已保留；若按儲存，會以您的版本為準（對方版本仍可在「修改紀錄」找回）。`);
+                }
+                return;
+            }
+            sopLoadedProductId = prodId;
+            sopLoadedVersion = sop.updatedAt;
+            sopConflictWarned = false;
 
             document.getElementById('sop-card-partno').textContent = product.code;
             document.getElementById('sop-card-partname').textContent = product.name;
@@ -1038,82 +1560,95 @@
             document.getElementById('sop-card-cavities').textContent = product.cavities;
             document.getElementById('sop-card-cycletime').textContent = product.cycleTime;
             document.getElementById('sop-card-weights').textContent = `單件 ${product.partWeight}g / 料頭 ${product.runnerWeight}g`;
+            document.getElementById('sop-card-updated').textContent = sop.updatedAt ? `最後修改：${fmtTime(sop.updatedAt)}　${memberName(sop.updatedBy)}` : '';
 
-            const sop = window.appData.sops[prodId] || {};
-            const fields = {
-                'sop-temp-nozzle': sop.tempNozzle ?? '',
-                'sop-temp-z1': sop.tempZ1 ?? '',
-                'sop-temp-z2': sop.tempZ2 ?? '',
-                'sop-temp-z3': sop.tempZ3 ?? '',
-                'sop-temp-z4': sop.tempZ4 ?? '',
-                'sop-temp-mold': sop.tempMold ?? '',
-                'sop-dry-temp': sop.dryTemp ?? '',
-                'sop-dry-time': sop.dryTime ?? '',
-                'sop-inj-p1': sop.injP1 ?? '',
-                'sop-inj-p2': sop.injP2 ?? '',
-                'sop-inj-p3': sop.injP3 ?? '',
-                'sop-inj-s1': sop.injS1 ?? '',
-                'sop-inj-s2': sop.injS2 ?? '',
-                'sop-inj-s3': sop.injS3 ?? '',
-                'sop-inj-pos1': sop.injPos1 ?? '',
-                'sop-inj-pos2': sop.injPos2 ?? '',
-                'sop-inj-pos3': sop.injPos3 ?? '',
-                'sop-inj-time': sop.injTime ?? '',
-                'sop-hold-pressure': sop.holdPressure ?? '',
-                'sop-hold-time': sop.holdTime ?? '',
-                'sop-vp-switch': sop.vpSwitch ?? '',
-                'sop-metering-stroke': sop.meteringStroke ?? '',
-                'sop-suck-back': sop.suckBack ?? '',
-                'sop-back-pressure': sop.backPressure ?? '',
-                'sop-cooling-time': sop.coolingTime ?? '',
-                'sop-open-stroke': sop.openStroke ?? '',
-                'sop-ejector': sop.ejector ?? '',
-                'sop-notes': sop.notes ?? ''
-            };
-
-            Object.entries(fields).forEach(([id, val]) => {
+            SOP_FIELDS.forEach(([id, key]) => {
                 const el = document.getElementById(id);
-                if (el) el.value = val;
+                if (el) el.value = sop[key] ?? '';
             });
+            sopDirty = false;
         }
 
-        async function saveSopData() {
+        function saveSopData() {
             const prodId = document.getElementById('sop-product-select').value;
             if (!prodId) return;
 
-            window.appData.sops[prodId] = {
-                tempNozzle: document.getElementById('sop-temp-nozzle').value,
-                tempZ1: document.getElementById('sop-temp-z1').value,
-                tempZ2: document.getElementById('sop-temp-z2').value,
-                tempZ3: document.getElementById('sop-temp-z3').value,
-                tempZ4: document.getElementById('sop-temp-z4').value,
-                tempMold: document.getElementById('sop-temp-mold').value,
-                dryTemp: document.getElementById('sop-dry-temp').value,
-                dryTime: document.getElementById('sop-dry-time').value,
-                injP1: document.getElementById('sop-inj-p1').value,
-                injP2: document.getElementById('sop-inj-p2').value,
-                injP3: document.getElementById('sop-inj-p3').value,
-                injS1: document.getElementById('sop-inj-s1').value,
-                injS2: document.getElementById('sop-inj-s2').value,
-                injS3: document.getElementById('sop-inj-s3').value,
-                injPos1: document.getElementById('sop-inj-pos1').value,
-                injPos2: document.getElementById('sop-inj-pos2').value,
-                injPos3: document.getElementById('sop-inj-pos3').value,
-                injTime: document.getElementById('sop-inj-time').value,
-                holdPressure: document.getElementById('sop-hold-pressure').value,
-                holdTime: document.getElementById('sop-hold-time').value,
-                vpSwitch: document.getElementById('sop-vp-switch').value,
-                meteringStroke: document.getElementById('sop-metering-stroke').value,
-                suckBack: document.getElementById('sop-suck-back').value,
-                backPressure: document.getElementById('sop-back-pressure').value,
-                coolingTime: document.getElementById('sop-cooling-time').value,
-                openStroke: document.getElementById('sop-open-stroke').value,
-                ejector: document.getElementById('sop-ejector').value,
-                notes: document.getElementById('sop-notes').value
-            };
+            // 數字欄位存成 number，空白存 null
+            const sop = {};
+            SOP_FIELDS.forEach(([id, key]) => {
+                const el = document.getElementById(id);
+                if (el.type === 'number') {
+                    sop[key] = el.value === '' ? null : parseFloat(el.value);
+                } else {
+                    sop[key] = el.value;
+                }
+            });
 
-            await window.saveData();
-            showToast('成型條件 SOP（含射出時間）已同步至雲端！');
+            sopDirty = false;
+            window.api.saveSop(prodId, sop);
+            showToast('成型條件已儲存（已留存一筆修改紀錄）');
+        }
+
+        // ---------- SOP 修改紀錄 ----------
+        const SOP_LABELS = {
+            tempNozzle: '射嘴溫度', tempZ1: '一段溫度', tempZ2: '二段溫度', tempZ3: '三段溫度', tempZ4: '四段溫度',
+            tempMold: '模溫', dryTemp: '烘料溫度', dryTime: '烘料時間',
+            injP1: '射壓1', injP2: '射壓2', injP3: '射壓3', injS1: '射速1', injS2: '射速2', injS3: '射速3',
+            injPos1: '位置1', injPos2: '位置2', injPos3: '位置3', injTime: '射出時間',
+            holdPressure: '保壓壓力', holdTime: '保壓時間', vpSwitch: 'V/P 切換',
+            meteringStroke: '計量行程', suckBack: '鬆退', backPressure: '背壓',
+            coolingTime: '冷卻時間', openStroke: '開模行程', ejector: '頂出', notes: '備註'
+        };
+        let historyCache = [];
+
+        async function openSopHistory() {
+            const prodId = document.getElementById('sop-product-select').value;
+            if (!prodId) return;
+            const list = document.getElementById('history-list');
+            list.innerHTML = '<div class="text-slate-500"><i class="fa-solid fa-spinner fa-spin mr-1"></i>載入中…</div>';
+            document.getElementById('history-modal').classList.remove('hidden');
+            try {
+                historyCache = await window.api.loadSopHistory(prodId);
+            } catch (e) {
+                list.innerHTML = '<div class="text-rose-600">讀取失敗，請確認網路連線</div>';
+                return;
+            }
+            if (historyCache.length === 0) {
+                list.innerHTML = '<div class="text-slate-500">尚無修改紀錄（新版系統上線後的儲存才會留下紀錄）</div>';
+                return;
+            }
+            const canEdit = ['admin', 'editor'].includes(window.currentUser?.role);
+            list.innerHTML = historyCache.map((h, i) => {
+                const prev = historyCache[i + 1];
+                let changes;
+                if (!prev) {
+                    changes = '<span class="text-slate-400">最早的一筆紀錄</span>';
+                } else {
+                    const diff = Object.keys(SOP_LABELS).filter(k => String(h[k] ?? '') !== String(prev[k] ?? ''));
+                    changes = diff.length === 0 ? '<span class="text-slate-400">數值無變動</span>'
+                        : diff.map(k => `<span class="inline-block bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 mr-1 mb-1 text-xs">${SOP_LABELS[k]}：${esc(prev[k] ?? '空')} → <strong>${esc(h[k] ?? '空')}</strong></span>`).join('');
+                }
+                return `
+                    <div class="border border-slate-200 rounded-xl p-3 ${i === 0 ? 'bg-blue-50/40' : ''}">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <div class="font-semibold text-slate-800">${fmtTime(h.updatedAt)}　${esc(memberName(h.updatedBy))}${i === 0 ? '<span class="ml-2 text-xs text-blue-600">（目前版本）</span>' : ''}</div>
+                            ${i > 0 && canEdit ? `<button onclick="restoreSopVersion(${i})" class="text-xs bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded-lg">載入此版本</button>` : ''}
+                        </div>
+                        <div>${changes}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        function restoreSopVersion(index) {
+            const h = historyCache[index];
+            if (!h) return;
+            SOP_FIELDS.forEach(([id, key]) => {
+                const el = document.getElementById(id);
+                if (el) el.value = h[key] ?? '';
+            });
+            sopDirty = true;
+            document.getElementById('history-modal').classList.add('hidden');
+            showToast('已載入舊版本到畫面，確認無誤後請按「儲存成型條件」');
         }
 
         function updateLogStandardPreview() {
@@ -1130,34 +1665,42 @@
             document.getElementById('log-std-preview').textContent = stdQty.toLocaleString() + ' pcs';
         }
 
-        async function addProductionLog(e) {
+        function addProductionLog(e) {
             e.preventDefault();
+            const productId = document.getElementById('log-product-select').value;
+            const product = window.appData.products.find(x => x.id === productId);
+            if (!product) { showToast('請先選擇產品'); return; }
             const newLog = {
                 id: 'log_' + Date.now(),
                 date: document.getElementById('log-date').value,
                 machine: document.getElementById('log-machine').value.trim(),
-                productId: document.getElementById('log-product-select').value,
+                productId: productId,
+                // 規格快照：產品日後被修改或刪除，歷史紀錄的標準量與達成率仍正確
+                productCode: product?.code ?? '',
+                productName: product?.name ?? '',
+                cycleTime: product?.cycleTime ?? null,
+                cavities: product?.cavities ?? null,
                 hours: parseFloat(document.getElementById('log-hours').value) || 0,
                 goodQty: parseInt(document.getElementById('log-good-qty').value, 10) || 0,
                 ngQty: parseInt(document.getElementById('log-ng-qty').value, 10) || 0,
-                reason: document.getElementById('log-reason').value.trim()
+                reason: document.getElementById('log-reason').value.trim(),
+                createdAt: new Date().toISOString(),
+                createdBy: window.currentUser?.email || ''
             };
 
-            window.appData.logs.unshift(newLog);
-            await window.saveData();
-            renderLogs();
+            window.api.addLog(newLog);
 
             document.getElementById('log-good-qty').value = '';
             document.getElementById('log-ng-qty').value = '0';
             document.getElementById('log-reason').value = '';
-            showToast('產程結案紀錄已新增並同步');
+            showToast('產程結案紀錄已新增');
         }
 
-        async function deleteLog(logId) {
-            window.appData.logs = window.appData.logs.filter(l => l.id !== logId);
-            await window.saveData();
-            renderLogs();
-            showToast('紀錄已刪除並同步');
+        function deleteLog(logId) {
+            const log = window.appData.logs.find(l => l.id === logId);
+            if (!log || !confirm(`確定刪除 ${log.date} ${log.machine} 的產程紀錄？`)) return;
+            window.api.deleteLog(logId);
+            showToast('紀錄已刪除');
         }
 
         function resetLogFilters() {
@@ -1175,7 +1718,7 @@
             const dEnd = document.getElementById('filter-date-end')?.value || '';
 
             return window.appData.logs.filter(log => {
-                if (mFilter && !log.machine.toLowerCase().includes(mFilter)) return false;
+                if (mFilter && !(log.machine || '').toLowerCase().includes(mFilter)) return false;
                 if (pFilter && log.productId !== pFilter) return false;
                 if (dStart && log.date < dStart) return false;
                 if (dEnd && log.date > dEnd) return false;
@@ -1194,8 +1737,9 @@
 
             filteredLogs.forEach(log => {
                 const product = window.appData.products.find(x => x.id === log.productId);
-                const prodName = product ? `${product.name} (${product.code})` : '已刪除產品';
-                const stdQty = product ? Math.round((3600 / product.cycleTime) * product.cavities * log.hours) : 0;
+                const prodName = product ? `${product.name} (${product.code})`
+                    : (log.productName ? `${log.productName} (${log.productCode})【已刪除】` : '已刪除產品');
+                const stdQty = logStdQty(log, product);
 
                 const totalProduced = log.goodQty + log.ngQty;
                 const yieldRate = totalProduced > 0 ? ((log.goodQty / totalProduced) * 100).toFixed(1) : '0.0';
@@ -1209,9 +1753,9 @@
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-slate-50 transition';
                 tr.innerHTML = `
-                    <td class="py-3 px-4 font-mono text-xs text-slate-600">${log.date}</td>
-                    <td class="py-3 px-4 font-semibold text-slate-800">${log.machine}</td>
-                    <td class="py-3 px-4 font-medium text-slate-800">${prodName}</td>
+                    <td class="py-3 px-4 font-mono text-xs text-slate-600">${esc(log.date)}</td>
+                    <td class="py-3 px-4 font-semibold text-slate-800">${esc(log.machine)}</td>
+                    <td class="py-3 px-4 font-medium text-slate-800">${esc(prodName)}</td>
                     <td class="py-3 px-4 text-center font-mono font-bold text-slate-700">${log.hours} hr</td>
                     <td class="py-3 px-4 text-right font-mono text-slate-500">${stdQty.toLocaleString()}</td>
                     <td class="py-3 px-4 text-right font-mono font-bold text-emerald-700">${log.goodQty.toLocaleString()}</td>
@@ -1220,9 +1764,10 @@
                         <span class="${yieldBadgeColor} px-2.5 py-0.5 rounded-full text-xs font-bold">${yieldRate}%</span>
                     </td>
                     <td class="py-3 px-4 text-center font-mono text-xs font-semibold text-blue-700">${achieveRate}%</td>
-                    <td class="py-3 px-4 text-xs text-slate-500 max-w-xs truncate" title="${log.reason}">${log.reason || '-'}</td>
-                    <td class="py-3 px-4 text-center">
-                        <button onclick="deleteLog('${log.id}')" class="text-slate-400 hover:text-rose-600 transition">
+                    <td class="py-3 px-4 text-xs text-slate-500 max-w-xs truncate" title="${esc(log.reason)}">${esc(log.reason) || '-'}</td>
+                    <td class="py-3 px-4 text-xs text-slate-500 whitespace-nowrap">${esc(memberName(log.createdBy)) || '-'}</td>
+                    <td class="need-editor py-3 px-4 text-center">
+                        <button onclick="deleteLog('${esc(log.id)}')" class="text-slate-400 hover:text-rose-600 transition">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </td>
@@ -1247,33 +1792,32 @@
 
             const rows = logsToExport.map(log => {
                 const product = window.appData.products.find(x => x.id === log.productId);
-                const code = product ? product.code : '-';
-                const name = product ? product.name : '已刪除產品';
-                const stdQty = product ? Math.round((3600 / product.cycleTime) * product.cavities * log.hours) : 0;
+                const code = product ? product.code : (log.productCode || '-');
+                const name = product ? product.name : (log.productName ? log.productName + '(已刪除)' : '已刪除產品');
+                const stdQty = logStdQty(log, product);
                 const total = log.goodQty + log.ngQty;
                 const yieldRate = total > 0 ? ((log.goodQty / total) * 100).toFixed(1) + '%' : '0.0%';
                 const achieveRate = stdQty > 0 ? ((log.goodQty / stdQty) * 100).toFixed(1) + '%' : '--';
-                const reason = (log.reason || '').replace(/"/g, '""');
 
                 return [
-                    `"${log.date}"`,
-                    `"${log.machine}"`,
-                    `"${code}"`,
-                    `"${name}"`,
+                    csvCell(log.date),
+                    csvCell(log.machine),
+                    csvCell(code),
+                    csvCell(name),
                     log.hours,
                     stdQty,
                     log.goodQty,
                     log.ngQty,
-                    `"${yieldRate}"`,
-                    `"${achieveRate}"`,
-                    `"${reason}"`
+                    csvCell(yieldRate),
+                    csvCell(achieveRate),
+                    csvCell(log.reason)
                 ].join(',');
             });
 
             const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
-            const today = new Date().toISOString().slice(0, 10);
+            const today = todayLocal();
             link.href = URL.createObjectURL(blob);
             link.download = `射出成型產程結案報表_${today}.csv`;
             document.body.appendChild(link);
@@ -1299,13 +1843,16 @@
 
             const shotsPerHour = 3600 / product.cycleTime;
             const hourlyOutput = shotsPerHour * product.cavities;
-            const totalShotsNeeded = Math.ceil(orderQty / product.cavities);
-            const totalHoursNeeded = orderQty > 0 ? (orderQty / hourlyOutput) : 0;
+            // 原版只把損耗加在用料，工時卻按訂單量算 → 工時低估。
+            // 這裡統一：要射出的總量 = 訂單量 × (1 + 損耗%)，工時與用料都以此計算
+            const plannedQty = orderQty * (1 + lossRate / 100);
+            const totalShotsNeeded = Math.ceil(plannedQty / product.cavities);
+            const totalHoursNeeded = totalShotsNeeded / shotsPerHour;
             const totalDaysNeeded = dailyHours > 0 ? (totalHoursNeeded / dailyHours) : 0;
 
             const netPartKg = (orderQty * product.partWeight) / 1000;
             const runnerKg = (totalShotsNeeded * product.runnerWeight) / 1000;
-            const totalMatWithLossKg = (netPartKg + runnerKg) * (1 + lossRate / 100);
+            const totalMatWithLossKg = (totalShotsNeeded * (product.partWeight * product.cavities + product.runnerWeight)) / 1000;
             const bags25kg = Math.ceil(totalMatWithLossKg / 25);
 
             const totalProcessingFee = orderQty * unitProcessingPrice;
@@ -1335,9 +1882,12 @@
         }
 
         function exportData() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.appData, null, 2));
+            // 用 Blob 網址下載：iPhone Safari 對 data: 網址的下載常常沒反應
+            const blob = new Blob([JSON.stringify(window.appData, null, 2)], { type: 'application/json' });
+            const dataStr = URL.createObjectURL(blob);
+            setTimeout(() => URL.revokeObjectURL(dataStr), 10000);
             const downloadAnchor = document.createElement('a');
-            const today = new Date().toISOString().slice(0, 10);
+            const today = todayLocal();
             downloadAnchor.setAttribute("href", dataStr);
             downloadAnchor.setAttribute("download", `射出成型管理系統備份_${today}.json`);
             document.body.appendChild(downloadAnchor);
@@ -1354,20 +1904,155 @@
             reader.onload = async function(e) {
                 try {
                     const imported = JSON.parse(e.target.result);
-                    if (imported && imported.products && Array.isArray(imported.products)) {
-                        window.appData = imported;
-                        await window.saveData();
-                        refreshAllViews();
-                        showToast('備份資料已成功匯入並同步至雲端！');
-                    } else {
-                        showToast('檔案格式不正確');
+                    const products = Array.isArray(imported?.products) ? imported.products : [];
+                    const badProduct = products.find(p => !p.id || !(p.cycleTime > 0) || !(p.cavities >= 1));
+                    if (products.length === 0 || badProduct) {
+                        showToast(badProduct ? `檔案格式不正確：產品 ${badProduct.code || '?'} 資料不完整` : '檔案格式不正確');
+                        return;
                     }
+                    const logs = (Array.isArray(imported.logs) ? imported.logs : []).filter(l => l && l.id);
+                    // 匯入會整份覆蓋雲端資料，所有裝置都會受影響，必須確認
+                    if (!confirm(`匯入將「覆蓋」雲端上的全部資料（所有裝置同步生效）：\n產品 ${products.length} 項、產程紀錄 ${logs.length} 筆。\n\n建議先按「備份下載」保留目前資料。確定匯入？`)) return;
+                    sopDirty = false;
+                    showToast('匯入中，請勿關閉頁面…');
+                    await window.api.importAll({
+                        products,
+                        sops: (imported.sops && typeof imported.sops === 'object') ? imported.sops : {},
+                        logs
+                    });
+                    showToast('備份資料已匯入');
                 } catch (err) {
-                    showToast('讀取失敗：不是有效的 JSON檔案');
+                    console.warn(err);
+                    showToast(err instanceof SyntaxError ? '讀取失敗：不是有效的 JSON 檔案' : '匯入失敗：' + (err.code || err.message));
                 }
             };
             reader.readAsText(file);
             event.target.value = '';
+        }
+
+        // ---------- 舊版資料轉移 ----------
+        async function runMigration() {
+            if (!confirm('要把舊版資料轉移到新版嗎？\n（舊資料會保留在雲端不刪除，轉移可以安心執行）')) return;
+            try {
+                showToast('轉移中，請勿關閉頁面…');
+                const r = await window.api.migrateLegacy();
+                showToast(`轉移完成：產品 ${r.products} 項、紀錄 ${r.logs} 筆`);
+            } catch (e) {
+                console.warn(e);
+                alert('轉移失敗：' + (e.code || e.message) + '\n請確認網路連線，或截圖給協助你的人。');
+            }
+        }
+
+        // ---------- 登入畫面 ----------
+        let registerMode = false;
+        function toggleRegister() {
+            registerMode = !registerMode;
+            document.getElementById('auth-name-row').classList.toggle('hidden', !registerMode);
+            document.getElementById('auth-submit-btn').textContent = registerMode ? '註冊並寄出驗證信' : '登入';
+            document.getElementById('auth-toggle-btn').textContent = registerMode ? '已有帳號？返回登入' : '第一次使用？註冊帳號';
+            document.getElementById('auth-password').autocomplete = registerMode ? 'new-password' : 'current-password';
+        }
+
+        async function authAction(fn, okMsg) {
+            try {
+                await fn();
+                if (okMsg) showToast(okMsg);
+            } catch (e) {
+                console.warn(e);
+                showToast(window.api.errMsg ? window.api.errMsg(e) : (e.code || e.message));
+            }
+        }
+
+        function authSubmit(e) {
+            e.preventDefault();
+            const email = document.getElementById('auth-email').value;
+            const pw = document.getElementById('auth-password').value;
+            if (registerMode) {
+                authAction(() => window.api.register(email, pw, document.getElementById('auth-name').value), '註冊成功，請到信箱收驗證信');
+            } else {
+                authAction(() => window.api.signIn(email, pw));
+            }
+        }
+
+        function authReset() {
+            const email = document.getElementById('auth-email').value.trim();
+            if (!email) { showToast('請先在上方輸入 Email'); return; }
+            authAction(() => window.api.resetPassword(email), '已寄出重設密碼信');
+        }
+
+        // ---------- 人員權限 ----------
+        function roleSelect(current, onchangeJs) {
+            return `<select onchange="${onchangeJs}" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs">
+                ${Object.entries(window.ROLE_LABEL).map(([k, v]) => `<option value="${k}" ${k === current ? 'selected' : ''}>${v}</option>`).join('')}
+            </select>`;
+        }
+
+        function renderMembers() {
+            if (window.currentUser?.role !== 'admin') return;
+            const reqs = window.accessRequests || [];
+            const badge = document.getElementById('request-count-badge');
+            badge.textContent = reqs.length;
+            badge.classList.toggle('hidden', reqs.length === 0);
+
+            document.getElementById('request-list').innerHTML = reqs.length === 0
+                ? '<div class="p-4 text-slate-400 text-xs">目前沒有待開通的申請</div>'
+                : reqs.map(r => `
+                    <div class="p-4 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <div class="font-semibold text-slate-800">${esc(r.name) || '(未填姓名)'}</div>
+                            <div class="text-xs text-slate-500">${esc(r.email)}　申請於 ${fmtTime(r.requestedAt)}</div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <select id="req-role-${esc(r.email)}" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs">
+                                <option value="operator">作業員</option><option value="editor">技術員</option><option value="admin">管理者</option>
+                            </select>
+                            <button onclick="approveReq('${esc(r.email)}')" class="bg-emerald-600 text-white px-3 py-1 rounded-lg text-xs font-medium">核准</button>
+                            <button onclick="rejectReq('${esc(r.email)}')" class="bg-slate-200 text-slate-700 px-3 py-1 rounded-lg text-xs font-medium">拒絕</button>
+                        </div>
+                    </div>`).join('');
+
+            const me = window.currentUser.email;
+            document.getElementById('member-list').innerHTML = (window.membersData || [])
+                .sort((a, b) => a.email.localeCompare(b.email))
+                .map(m => `
+                    <div class="p-4 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <div class="font-semibold text-slate-800">${esc(m.name) || '(未填姓名)'}${m.email === me ? '<span class="ml-1 text-xs text-blue-600">（你）</span>' : ''}</div>
+                            <div class="text-xs text-slate-500">${esc(m.email)}</div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            ${m.email === me ? `<span class="text-xs font-semibold text-slate-600">${window.ROLE_LABEL[m.role]}</span>`
+                                : `${roleSelect(m.role, `changeRole('${esc(m.email)}', this.value)`)}
+                                   <button onclick="removeMember('${esc(m.email)}')" class="text-slate-400 hover:text-rose-600 p-1" title="移除權限"><i class="fa-solid fa-user-xmark"></i></button>`}
+                        </div>
+                    </div>`).join('');
+        }
+
+        function approveReq(email) {
+            const r = window.accessRequests.find(x => x.email === email);
+            const role = document.getElementById('req-role-' + email).value;
+            window.api.approveRequest(email, role, r?.name);
+            showToast(`已開通 ${email}（${window.ROLE_LABEL[role]}）`);
+        }
+        function rejectReq(email) {
+            if (!confirm(`拒絕 ${email} 的申請？`)) return;
+            window.api.rejectRequest(email);
+        }
+        function changeRole(email, role) {
+            const m = window.membersData.find(x => x.email === email);
+            window.api.setMember(email, role, m?.name);
+            showToast(`${email} 已改為${window.ROLE_LABEL[role]}`);
+        }
+        function removeMember(email) {
+            if (!confirm(`移除 ${email} 的權限？對方將無法再看到任何資料。`)) return;
+            window.api.removeMember(email);
+        }
+        function addMemberManually(e) {
+            e.preventDefault();
+            const email = document.getElementById('new-member-email').value.trim().toLowerCase();
+            window.api.setMember(email, document.getElementById('new-member-role').value, document.getElementById('new-member-name').value.trim());
+            e.target.reset();
+            showToast(`已預先開通 ${email}，對方註冊並驗證信箱後即可使用`);
         }
 
         function refreshAllViews() {
@@ -1376,6 +2061,7 @@
             updateLogStandardPreview();
             renderLogs();
             runScheduleCalc();
+            renderMembers();
         }
     </script>
 </body>
