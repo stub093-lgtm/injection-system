@@ -246,7 +246,7 @@
 
             <!-- 產品表格清單 -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto hidden sm:block">
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs uppercase tracking-wider">
@@ -266,6 +266,8 @@
                         </tbody>
                     </table>
                 </div>
+                <!-- 手機版：卡片 -->
+                <div id="product-cards" class="sm:hidden divide-y divide-slate-200"></div>
             </div>
 
             <!-- 機台清單 -->
@@ -560,7 +562,7 @@
                 </div>
 
                 <!-- 搜尋與篩選 -->
-                <div class="bg-slate-100/60 p-3.5 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+                <div class="bg-slate-100/60 p-3.5 border-b border-slate-200 grid grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
                     <div>
                         <label class="block text-slate-500 font-semibold mb-1">篩選機台</label>
                         <select id="filter-machine" onchange="renderLogs()" class="w-full py-1.5 px-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 font-medium">
@@ -588,7 +590,7 @@
                     </div>
                 </div>
 
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto hidden sm:block">
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 text-xs uppercase">
@@ -611,6 +613,8 @@
                         </tbody>
                     </table>
                 </div>
+                <!-- 手機版：卡片 -->
+                <div id="log-cards" class="sm:hidden divide-y divide-slate-200"></div>
             </div>
         </section>
 
@@ -1372,8 +1376,11 @@
         function renderProducts() {
             const tbody = document.getElementById('product-table-body');
             tbody.innerHTML = '';
+            const cards = document.getElementById('product-cards');
+            cards.innerHTML = '';
             if (window.appData.products.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400 text-sm">尚無產品資料</td></tr>';
+                cards.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm">尚無產品資料</div>';
             }
 
             window.appData.products.forEach(p => {
@@ -1411,6 +1418,29 @@
                     </td>
                 `;
                 tbody.appendChild(tr);
+
+                // 手機版卡片
+                cards.insertAdjacentHTML('beforeend', `
+                    <div class="p-4 space-y-2">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <div class="font-bold text-slate-800 text-base">${esc(p.name)}</div>
+                                <div class="text-xs font-mono text-blue-600">${esc(p.code)}</div>
+                            </div>
+                            <span class="shrink-0 bg-slate-100 text-slate-700 px-2 py-1 rounded-md text-xs font-medium border border-slate-200">${esc(p.material)}</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 text-center">
+                            <div class="bg-slate-50 rounded-lg py-1.5"><div class="text-[11px] text-slate-500">穴數</div><div class="font-bold text-slate-800">${p.cavities}</div></div>
+                            <div class="bg-blue-50 rounded-lg py-1.5"><div class="text-[11px] text-blue-600">週期</div><div class="font-bold text-blue-800">${p.cycleTime}s</div></div>
+                            <div class="bg-emerald-50 rounded-lg py-1.5"><div class="text-[11px] text-emerald-600">時產量</div><div class="font-bold text-emerald-800">${hourlyOutput.toLocaleString()}</div></div>
+                        </div>
+                        <div class="text-xs text-slate-600">單件 ${p.partWeight.toFixed(1)}g ・ 料頭 ${p.runnerWeight.toFixed(1)}g ・ 每模 ${totalShotWeight}g</div>
+                        <div class="flex gap-2 pt-1">
+                            <button onclick="viewProductSop('${esc(p.id)}')" class="flex-1 bg-indigo-50 text-indigo-700 border border-indigo-200 py-2 rounded-lg text-sm font-medium"><i class="fa-solid fa-sliders mr-1"></i>成型條件</button>
+                            <button onclick="openProductModal('${esc(p.id)}')" class="need-editor flex-1 bg-blue-50 text-blue-700 border border-blue-200 py-2 rounded-lg text-sm font-medium"><i class="fa-solid fa-pen mr-1"></i>編輯</button>
+                            <button onclick="deleteProduct('${esc(p.id)}')" class="need-editor px-3 bg-rose-50 text-rose-600 border border-rose-200 py-2 rounded-lg text-sm" title="刪除"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>
+                    </div>`);
             });
 
             populateProductDropdowns();
@@ -1763,6 +1793,8 @@
         function renderLogs() {
             const tbody = document.getElementById('log-table-body');
             tbody.innerHTML = '';
+            const cards = document.getElementById('log-cards');
+            cards.innerHTML = '';
 
             let totalGood = 0;
             let totalNg = 0;
@@ -1807,7 +1839,30 @@
                     </td>
                 `;
                 tbody.appendChild(tr);
+
+                // 手機版卡片
+                cards.insertAdjacentHTML('beforeend', `
+                    <div class="p-4 space-y-2">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0">
+                                <div class="font-bold text-slate-800 truncate">${esc(prodName)}</div>
+                                <div class="text-xs text-slate-500"><span class="font-mono">${esc(log.date)}</span> ・ <span class="font-semibold text-slate-700">${esc(log.machine)}</span> ・ ${log.hours} hr</div>
+                            </div>
+                            <span class="${yieldBadgeColor} shrink-0 px-2.5 py-1 rounded-full text-xs font-bold">良率 ${yieldRate}%</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 text-center">
+                            <div class="bg-emerald-50 rounded-lg py-1.5"><div class="text-[11px] text-emerald-600">良品</div><div class="font-bold text-emerald-800">${log.goodQty.toLocaleString()}</div></div>
+                            <div class="bg-rose-50 rounded-lg py-1.5"><div class="text-[11px] text-rose-600">不良</div><div class="font-bold text-rose-700">${log.ngQty.toLocaleString()}</div></div>
+                            <div class="bg-blue-50 rounded-lg py-1.5"><div class="text-[11px] text-blue-600">達成率</div><div class="font-bold text-blue-800">${achieveRate}%</div></div>
+                        </div>
+                        <div class="text-xs text-slate-500">標準應產 ${stdQty.toLocaleString()} ・ 登記人 ${esc(memberName(log.createdBy)) || '-'}</div>
+                        ${log.reason ? `<div class="text-xs text-slate-600 bg-slate-50 rounded-lg p-2">${esc(log.reason)}</div>` : ''}
+                        <div class="need-editor flex justify-end">
+                            <button onclick="deleteLog('${esc(log.id)}')" class="text-xs text-slate-400 hover:text-rose-600 px-2 py-1"><i class="fa-solid fa-trash-can mr-1"></i>刪除</button>
+                        </div>
+                    </div>`);
             });
+            if (filteredLogs.length === 0) cards.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm">沒有符合的紀錄</div>';
 
             const overallTotal = totalGood + totalNg;
             const overallYield = overallTotal > 0 ? ((totalGood / overallTotal) * 100).toFixed(1) : '0.0';
