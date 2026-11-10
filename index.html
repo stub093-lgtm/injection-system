@@ -28,7 +28,6 @@
             background-color: #f1f5f9;
         }
         
-        /* 列印專用樣式：只列印 SOP 條件卡 */
         @media print {
             body * {
                 visibility: hidden;
@@ -119,15 +118,15 @@
         </div>
     </header>
 
-    <!-- 雲端 API 尚未啟用提示橫幅 (預設隱藏，僅當偵測到 API 未啟用時顯示) -->
+    <!-- 雲端 API 尚未啟用提示橫幅 -->
     <div id="api-warning-banner" class="hidden bg-amber-50 border-b border-amber-200 px-4 py-2.5 text-xs text-amber-900 no-print">
         <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center space-x-2">
                 <i class="fa-solid fa-triangle-exclamation text-amber-600 text-sm"></i>
-                <span><strong>提示：</strong>目前處於「本機自動保存模式」（您輸入的資料皆安全保存在此設備中）。若要開啟跨裝置雲端同步，請確認已於 Firebase 控制台啟用 Firestore 資料庫與讀寫規則。</span>
+                <span><strong>提示：</strong>目前處於「本機保存模式」。若要開啟跨裝置雲端同步，請確認 Google Cloud API 已開通。</span>
             </div>
             <a href="https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=sunghsing" target="_blank" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded-lg font-semibold transition shrink-0">
-                前往啟用雲端 API <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i>
+                前往檢查雲端 API <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i>
             </a>
         </div>
     </div>
@@ -169,7 +168,7 @@
                             </tr>
                         </thead>
                         <tbody id="product-table-body" class="divide-y divide-slate-200 text-sm">
-                            <!-- JS 動態生成 -->
+                            <!-- 動態生成 -->
                         </tbody>
                     </table>
                 </div>
@@ -178,12 +177,11 @@
 
         <!-- ==================== 模組二：射出成型條件表 (SOP) ==================== -->
         <section id="tab-sop" class="tab-content hidden space-y-6">
-            <!-- 產品選擇與工具列 -->
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
                 <div class="flex-1 max-w-xl">
                     <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">選擇要查閱或設定成型條件的產品：</label>
                     <select id="sop-product-select" onchange="loadSopForSelectedProduct()" class="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
-                        <!-- JS 動態填入 -->
+                        <!-- 動態填入 -->
                     </select>
                 </div>
                 <div class="flex flex-wrap items-center gap-2.5">
@@ -198,7 +196,7 @@
                 </div>
             </div>
 
-            <!-- 可列印的標準成型條件卡區域 -->
+            <!-- 可列印條件卡 -->
             <div id="printable-sop-card" class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 space-y-6">
                 <div class="border-b-2 border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
@@ -215,7 +213,7 @@
                     </div>
                 </div>
 
-                <!-- 1. 溫度與乾燥設定 -->
+                <!-- 1. 溫度與乾燥 -->
                 <div>
                     <h4 class="text-sm font-bold text-slate-800 bg-slate-100 px-3 py-2 rounded-lg border-l-4 border-amber-500 flex items-center gap-2 mb-3">
                         <i class="fa-solid fa-temperature-high text-amber-600"></i>
@@ -257,7 +255,7 @@
                     </div>
                 </div>
 
-                <!-- 2. 三段射出與保壓設定區 -->
+                <!-- 2. 三段射出與保壓 -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-2 space-y-3">
                         <h4 class="text-sm font-bold text-slate-800 bg-slate-100 px-3 py-2 rounded-lg border-l-4 border-blue-600 flex items-center gap-2">
@@ -277,26 +275,26 @@
                                 <tbody class="divide-y divide-slate-200">
                                     <tr>
                                         <td class="py-3 px-3 font-medium text-slate-700 bg-slate-50/50">射出壓力 (bar / %)</td>
-                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-p1" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
-                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-p2" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
-                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-p3" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-p1" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-blue-700 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-p2" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-blue-700 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-p3" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-blue-700 outline-none"></td>
                                     </tr>
                                     <tr>
                                         <td class="py-3 px-3 font-medium text-slate-700 bg-slate-50/50">射出速度 (mm/s / %)</td>
-                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-s1" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-emerald-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
-                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-s2" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-emerald-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
-                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-s3" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-emerald-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-s1" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-emerald-700 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-s2" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-emerald-700 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-s3" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 font-semibold text-emerald-700 outline-none"></td>
                                     </tr>
                                     <tr>
-                                        <td class="py-3 px-3 font-medium text-slate-700 bg-slate-50/50">切換位置 (mm) <span class="text-xs text-slate-400 font-normal">(選填)</span></td>
-                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-pos1" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
-                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-pos2" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
-                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-pos3" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"></td>
+                                        <td class="py-3 px-3 font-medium text-slate-700 bg-slate-50/50">切換位置 (mm)</td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-pos1" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 text-slate-700 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-pos2" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 text-slate-700 outline-none"></td>
+                                        <td class="p-2"><input type="number" step="0.1" id="sop-inj-pos3" class="w-full text-center bg-white border border-slate-300 rounded-lg py-1.5 text-slate-700 outline-none"></td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
-                        <!-- 新增：射出時間欄位 -->
+                        <!-- 射出時間欄位 -->
                         <div class="bg-blue-50/60 p-3 rounded-xl border border-blue-200 flex flex-wrap items-center justify-between gap-2">
                             <div class="flex items-center space-x-2">
                                 <i class="fa-solid fa-stopwatch text-blue-600"></i>
@@ -309,7 +307,7 @@
                         </div>
                     </div>
 
-                    <!-- 保壓設定 -->
+                    <!-- 保壓 -->
                     <div>
                         <h4 class="text-sm font-bold text-slate-800 bg-slate-100 px-3 py-2 rounded-lg border-l-4 border-indigo-600 flex items-center gap-2 mb-3">
                             <i class="fa-solid fa-compress text-indigo-600"></i>
@@ -318,15 +316,15 @@
                         <div class="grid grid-cols-1 gap-3 bg-indigo-50/40 p-4 rounded-xl border border-indigo-100">
                             <div class="flex items-center justify-between gap-2">
                                 <label class="text-xs font-semibold text-slate-700">保壓壓力 (bar / %)</label>
-                                <input type="number" step="0.1" id="sop-hold-pressure" class="w-32 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-right focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <input type="number" step="0.1" id="sop-hold-pressure" class="w-32 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-right outline-none">
                             </div>
                             <div class="flex items-center justify-between gap-2">
                                 <label class="text-xs font-semibold text-slate-700">保壓時間 (秒 s)</label>
-                                <input type="number" step="0.1" id="sop-hold-time" class="w-32 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-right focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <input type="number" step="0.1" id="sop-hold-time" class="w-32 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-right outline-none">
                             </div>
                             <div class="flex items-center justify-between gap-2">
                                 <label class="text-xs font-semibold text-slate-700">V/P 切換位置 (mm)</label>
-                                <input type="number" step="0.1" id="sop-vp-switch" class="w-32 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-right focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <input type="number" step="0.1" id="sop-vp-switch" class="w-32 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-right outline-none">
                             </div>
                         </div>
                     </div>
@@ -374,7 +372,7 @@
             </div>
         </section>
 
-        <!-- ==================== 模組三：產程結案紀錄表 (下模結算) ==================== -->
+        <!-- ==================== 模組三：產程結案紀錄表 ==================== -->
         <section id="tab-logs" class="tab-content hidden space-y-6">
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
                 <div class="mb-4">
@@ -382,12 +380,12 @@
                         <i class="fa-solid fa-pen-to-square text-blue-600"></i>
                         登記產程結案紀錄（生產完下模具時記錄）
                     </h2>
-                    <p class="text-xs text-slate-500 mt-0.5">無須每天重複打卡，可於整批工單生產完畢、準備下模具時一次記錄該產程的總生產時數與總產出數量（支援跨日長時數）。</p>
+                    <p class="text-xs text-slate-500 mt-0.5">整批工單生產完畢、準備下模具時一次記錄該產程的總生產時數與總產出數量（支援跨日長時數）。</p>
                 </div>
 
                 <form id="log-form" onsubmit="addProductionLog(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
                     <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">結案/下模日期 (可任選)</label>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">結案/下模日期</label>
                         <input type="date" id="log-date" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
                     <div>
@@ -397,12 +395,12 @@
                     <div class="sm:col-span-2">
                         <label class="block text-xs font-semibold text-slate-600 mb-1">生產產品</label>
                         <select id="log-product-select" onchange="updateLogStandardPreview()" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                            <!-- JS 動態載入 -->
+                            <!-- 動態載入 -->
                         </select>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-blue-700 mb-1">本批總生產時數 (小時)</label>
-                        <input type="number" step="0.5" min="0.5" id="log-hours" value="24" placeholder="不限時數，如 48" oninput="updateLogStandardPreview()" required class="w-full bg-blue-50/50 border border-blue-300 rounded-xl px-3 py-2 text-sm font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="number" step="0.5" min="0.5" id="log-hours" value="24" placeholder="如 48" oninput="updateLogStandardPreview()" required class="w-full bg-blue-50/50 border border-blue-300 rounded-xl px-3 py-2 text-sm font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
                     <div class="bg-blue-50/70 p-2.5 rounded-xl border border-blue-200 flex flex-col justify-center">
                         <span class="text-[11px] text-blue-700 font-semibold">本批標準應產總量</span>
@@ -411,7 +409,7 @@
 
                     <div class="sm:col-span-2">
                         <label class="block text-xs font-semibold text-emerald-700 mb-1">本批實際良品總數 (OK pcs)</label>
-                        <input type="number" min="0" id="log-good-qty" placeholder="輸入整批下模良品總數" required class="w-full bg-emerald-50/40 border border-emerald-300 rounded-xl px-3 py-2 text-sm font-bold text-emerald-900 focus:ring-2 focus:ring-emerald-500 outline-none">
+                        <input type="number" min="0" id="log-good-qty" placeholder="輸入整批良品總數" required class="w-full bg-emerald-50/40 border border-emerald-300 rounded-xl px-3 py-2 text-sm font-bold text-emerald-900 focus:ring-2 focus:ring-emerald-500 outline-none">
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-rose-700 mb-1">不良品總數 (NG pcs)</label>
@@ -419,7 +417,7 @@
                     </div>
                     <div class="sm:col-span-2">
                         <label class="block text-xs font-semibold text-slate-600 mb-1">工單區間 / 下模異常備註 (選填)</label>
-                        <input type="text" id="log-reason" placeholder="如：11/01~11/03 產程下模、調機損耗..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="text" id="log-reason" placeholder="如：11/01~11/03 產程下模..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
                     <div class="flex items-end">
                         <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-xl text-sm shadow-sm transition flex items-center justify-center space-x-1.5">
@@ -430,7 +428,7 @@
                 </form>
             </div>
 
-            <!-- 生產紀錄統計與清單 -->
+            <!-- 紀錄清單 -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
                 <div class="p-4 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-slate-50">
                     <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
@@ -446,7 +444,7 @@
                     </div>
                 </div>
 
-                <!-- 搜尋與篩選工具列 -->
+                <!-- 搜尋與篩選 -->
                 <div class="bg-slate-100/60 p-3.5 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
                     <div>
                         <label class="block text-slate-500 font-semibold mb-1">搜尋機台</label>
@@ -459,7 +457,6 @@
                         <label class="block text-slate-500 font-semibold mb-1">篩選產品</label>
                         <select id="filter-product" onchange="renderLogs()" class="w-full py-1.5 px-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 font-medium">
                             <option value="">全部產品</option>
-                            <!-- JS 動態填入 -->
                         </select>
                     </div>
                     <div>
@@ -495,35 +492,34 @@
                             </tr>
                         </thead>
                         <tbody id="log-table-body" class="divide-y divide-slate-200 text-sm">
-                            <!-- JS 動態生成 -->
+                            <!-- 動態生成 -->
                         </tbody>
                     </table>
                 </div>
             </div>
         </section>
 
-        <!-- ==================== 模組四：排程與產能用料試算器 ==================== -->
+        <!-- ==================== 模組四：排程與用料試算 ==================== -->
         <section id="tab-calc" class="tab-content hidden space-y-6">
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                <!-- 左側：輸入面板 -->
+                <!-- 輸入面板 -->
                 <div class="lg:col-span-5 bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-5">
                     <div>
                         <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
                             <i class="fa-solid fa-calculator text-blue-600"></i>
                             訂單排程、用料與單價成本試算
                         </h2>
-                        <p class="text-xs text-slate-500 mt-1">自動引用模穴數、週期時間與重量數據，精算工時、原料採購量與加工代工金額。</p>
+                        <p class="text-xs text-slate-500 mt-1">精算工時、原料採購量與加工代工金額。</p>
                     </div>
 
                     <div class="space-y-4">
                         <div>
                             <label class="block text-xs font-semibold text-slate-600 mb-1.5">1. 選擇要排程生產的產品：</label>
                             <select id="calc-product-select" onchange="runScheduleCalc()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none">
-                                <!-- JS 動態填入 -->
+                                <!-- 動態填入 -->
                             </select>
                         </div>
 
-                        <!-- 產品規格小卡 -->
                         <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-1.5 text-slate-600">
                             <div class="flex justify-between"><span>塑料材質：</span><strong id="calc-info-mat" class="text-slate-800">--</strong></div>
                             <div class="flex justify-between"><span>模具穴數 / 標準週期：</span><strong id="calc-info-cav-ct" class="text-slate-800">--</strong></div>
@@ -546,7 +542,6 @@
                             </div>
                         </div>
 
-                        <!-- 加工單價與塑料單價設定 -->
                         <div class="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200/80 space-y-3">
                             <span class="text-xs font-bold text-amber-900 flex items-center gap-1.5">
                                 <i class="fa-solid fa-coins text-amber-600"></i>
@@ -555,18 +550,18 @@
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
                                     <label class="block text-[11px] font-semibold text-slate-700 mb-1">成型代工單價 (元/件)</label>
-                                    <input type="number" id="calc-unit-processing-price" value="0.8" step="0.01" min="0" oninput="runScheduleCalc()" class="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-sm font-bold text-amber-900 focus:ring-2 focus:ring-amber-500 outline-none">
+                                    <input type="number" id="calc-unit-processing-price" value="0.8" step="0.01" min="0" oninput="runScheduleCalc()" class="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-sm font-bold text-amber-900 outline-none">
                                 </div>
                                 <div>
                                     <label class="block text-[11px] font-semibold text-slate-700 mb-1">原料單價 (元/kg)</label>
-                                    <input type="number" id="calc-unit-material-price" value="65" step="1" min="0" oninput="runScheduleCalc()" class="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-sm font-bold text-amber-900 focus:ring-2 focus:ring-amber-500 outline-none">
+                                    <input type="number" id="calc-unit-material-price" value="65" step="1" min="0" oninput="runScheduleCalc()" class="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-sm font-bold text-amber-900 outline-none">
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- 右側：試算結果 -->
+                <!-- 試算結果 -->
                 <div class="lg:col-span-7 space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex items-start justify-between">
@@ -592,7 +587,7 @@
                         </div>
                     </div>
 
-                    <!-- 代工單價與金額分析卡片 -->
+                    <!-- 代工金額分析 -->
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
                         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                             <div class="flex items-center gap-2">
@@ -621,7 +616,7 @@
                         </div>
                     </div>
 
-                    <!-- 備料分析卡片 -->
+                    <!-- 備料分析 -->
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
                         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                             <div class="flex items-center gap-2">
@@ -646,11 +641,6 @@
                                 <div class="text-[11px] text-emerald-600 mt-0.5" id="res-bags-hint">約合 25kg 包裝 -- 袋</div>
                             </div>
                         </div>
-
-                        <div class="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200/60 leading-relaxed">
-                            <i class="fa-solid fa-circle-info text-blue-500 mr-1"></i>
-                            <strong>公式說明：</strong> 總模次 = 訂單數量 ÷ 模穴數；每模總重 = (單件成品重 × 穴數) + 料頭重。建議總備料重已加上您設定的損耗緩衝。
-                        </div>
                     </div>
                 </div>
             </div>
@@ -658,7 +648,7 @@
 
     </main>
 
-    <!-- ==================== 新增/編輯產品 Modal ==================== -->
+    <!-- 產品 Modal -->
     <div id="product-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 space-y-5">
             <div class="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -673,37 +663,37 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-semibold text-slate-600 mb-1">產品料號 (Part No.)</label>
-                        <input type="text" id="prod-code" placeholder="如：INJ-A01" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="text" id="prod-code" placeholder="如：INJ-A01" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none">
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-600 mb-1">產品名稱</label>
-                        <input type="text" id="prod-name" placeholder="如：ABS 感測器上蓋" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="text" id="prod-name" placeholder="如：ABS 感測器上蓋" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none">
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-semibold text-slate-600 mb-1">使用塑料材質規格</label>
-                        <input type="text" id="prod-material" placeholder="如：奇美 ABS PA-757" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="text" id="prod-material" placeholder="如：奇美 ABS PA-757" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none">
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-600 mb-1">模具穴數 (Cavities)</label>
-                        <input type="number" id="prod-cavities" min="1" value="2" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="number" id="prod-cavities" min="1" value="2" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold outline-none">
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-xs font-semibold text-slate-600 mb-1">單件成品重 (g)</label>
-                        <input type="number" step="0.1" min="0.1" id="prod-part-weight" placeholder="18.5" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="number" step="0.1" min="0.1" id="prod-part-weight" placeholder="18.5" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold outline-none">
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-600 mb-1">每模料頭重 (g)</label>
-                        <input type="number" step="0.1" min="0" id="prod-runner-weight" placeholder="6.0" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="number" step="0.1" min="0" id="prod-runner-weight" placeholder="6.0" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold outline-none">
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-blue-700 mb-1">週期時間 (秒)</label>
-                        <input type="number" step="0.5" min="1" id="prod-cycle-time" placeholder="28" required class="w-full bg-blue-50 border border-blue-300 rounded-xl px-3 py-2 text-sm font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="number" step="0.5" min="1" id="prod-cycle-time" placeholder="28" required class="w-full bg-blue-50 border border-blue-300 rounded-xl px-3 py-2 text-sm font-bold text-blue-900 outline-none">
                     </div>
                 </div>
 
@@ -715,18 +705,17 @@
         </div>
     </div>
 
-    <!-- 提示訊息 Toast -->
+    <!-- Toast 提示 -->
     <div id="toast-msg" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center space-x-2 opacity-0 pointer-events-none transition-opacity duration-300 z-50">
         <i class="fa-solid fa-circle-check text-emerald-400"></i>
         <span id="toast-text">操作成功</span>
     </div>
 
-    <!-- 載入 Firebase 9 模組 -->
+    <!-- Firebase 9 SDK 初始化與即時同步 (專屬專案 sunghsing) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
-        // 嵌入您的專屬 Firebase 設定
         const firebaseConfig = {
             apiKey: "AIzaSyDqFzF8L3N1-gxmycxJc8Y4FFQKXiNN2ds",
             authDomain: "sunghsing.firebaseapp.com",
@@ -739,73 +728,67 @@
         };
 
         const LOCAL_STORAGE_KEY = 'INJECTION_MOLDING_APP_DATA_V1';
-        let db = null;
-        let isCloudConnected = false;
 
-        // 預設資料
-        const defaultData = {
+        // 預設示範資料
+        const fallbackData = {
             products: [
-                {
-                    id: 'p1',
-                    code: 'INJ-A101',
-                    name: '控制器防水前蓋',
-                    material: 'ABS (奇美 PA-757)',
-                    cavities: 2,
-                    partWeight: 24.5,
-                    runnerWeight: 7.0,
-                    cycleTime: 30
-                },
-                {
-                    id: 'p2',
-                    code: 'INJ-B205',
-                    name: '高強度耐衝擊扣具',
-                    material: 'PP (台塑 1120)',
-                    cavities: 4,
-                    partWeight: 8.2,
-                    runnerWeight: 5.2,
-                    cycleTime: 20
-                }
+                { id: 'p1', code: 'INJ-A101', name: '控制器防水前蓋', material: 'ABS (奇美 PA-757)', cavities: 2, partWeight: 24.5, runnerWeight: 7.0, cycleTime: 30 },
+                { id: 'p2', code: 'INJ-B205', name: '高強度耐衝擊扣具', material: 'PP (台塑 1120)', cavities: 4, partWeight: 8.2, runnerWeight: 5.2, cycleTime: 20 }
             ],
             sops: {
-                'p1': {
-                    tempNozzle: 215, tempZ1: 220, tempZ2: 215, tempZ3: 205, tempZ4: 195,
-                    tempMold: '55 / 50', dryTemp: 85, dryTime: 3,
-                    injP1: 75, injP2: 65, injP3: 50,
-                    injS1: 45, injS2: 60, injS3: 30,
-                    injPos1: 42, injPos2: 25, injPos3: 10,
-                    injTime: 2.2,
-                    holdPressure: 45, holdTime: 3.5, vpSwitch: 10,
-                    meteringStroke: 58, suckBack: 3.0, backPressure: 8,
-                    coolingTime: 18, openStroke: 180, ejector: '40mm / 2次',
-                    notes: '1. 第一段慢速過澆口防噴痕，第二段快速充模。\n2. 表面不可有流痕或縮水。'
-                },
-                'p2': {
-                    tempNozzle: 200, tempZ1: 205, tempZ2: 200, tempZ3: 190, tempZ4: 180,
-                    tempMold: '40 / 40', dryTemp: 80, dryTime: 2,
-                    injP1: 65, injP2: 60, injP3: 45,
-                    injS1: 50, injS2: 65, injS3: 35,
-                    injPos1: 35, injPos2: 18, injPos3: 8,
-                    injTime: 1.5,
-                    holdPressure: 40, holdTime: 2.5, vpSwitch: 8,
-                    meteringStroke: 45, suckBack: 2.5, backPressure: 6,
-                    coolingTime: 12, openStroke: 140, ejector: '30mm / 1次',
-                    notes: '注意頂出是否變形。'
-                }
+                'p1': { tempNozzle: 215, tempZ1: 220, tempZ2: 215, tempZ3: 205, tempZ4: 195, tempMold: '55 / 50', dryTemp: 85, dryTime: 3, injP1: 75, injP2: 65, injP3: 50, injS1: 45, injS2: 60, injS3: 30, injPos1: 42, injPos2: 25, injPos3: 10, injTime: 2.2, holdPressure: 45, holdTime: 3.5, vpSwitch: 10, meteringStroke: 58, suckBack: 3.0, backPressure: 8, coolingTime: 18, openStroke: 180, ejector: '40mm / 2次', notes: '' },
+                'p2': { tempNozzle: 200, tempZ1: 205, tempZ2: 200, tempZ3: 190, tempZ4: 180, tempMold: '40 / 40', dryTemp: 80, dryTime: 2, injP1: 65, injP2: 60, injP3: 45, injS1: 50, injS2: 65, injS3: 35, injPos1: 35, injPos2: 18, injPos3: 8, injTime: 1.5, holdPressure: 40, holdTime: 2.5, vpSwitch: 8, meteringStroke: 45, suckBack: 2.5, backPressure: 6, coolingTime: 12, openStroke: 140, ejector: '30mm / 1次', notes: '' }
             },
             logs: []
         };
 
-        window.appData = JSON.parse(JSON.stringify(defaultData));
+        // 1. 本地讀取先行
+        try {
+            const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0) {
+                    window.appData = parsed;
+                }
+            }
+        } catch(e) {}
 
-        // 1. 第一時間先載入本機已儲存的資料，確保畫面立刻有使用者先前輸入的資料
-        loadLocalData();
+        if (!window.appData) {
+            window.appData = JSON.parse(JSON.stringify(fallbackData));
+        }
 
-        // 2. 初始化 Firebase 雲端連線
+        // 2. 初始化 Firebase
+        let db = null;
         try {
             setLogLevel('silent');
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
-            initCloudSync();
+            
+            // 立即監聽 Firestore 上的真實資料庫
+            const docRef = doc(db, "factory_system", "main_data");
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const cloudData = docSnap.data();
+                    // 只要雲端有資料，立刻載入！
+                    if (cloudData && Array.isArray(cloudData.products) && cloudData.products.length > 0) {
+                        window.appData = {
+                            products: cloudData.products,
+                            sops: cloudData.sops || {},
+                            logs: cloudData.logs || []
+                        };
+                        try {
+                            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(window.appData));
+                        } catch(e) {}
+                        if (typeof window.refreshAllViews === 'function') {
+                            window.refreshAllViews();
+                        }
+                    }
+                }
+                updateStatusBadge(true);
+            }, (err) => {
+                console.warn("Firestore 連線警告:", err);
+                updateStatusBadge(false, true);
+            });
         } catch (e) {
             updateStatusBadge(false);
         }
@@ -821,86 +804,25 @@
                 if (banner) banner.classList.add('hidden');
             } else {
                 el.className = "inline-flex items-center text-xs font-semibold text-amber-400";
-                el.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 mr-1.5"></span>本機自動保存模式';
+                el.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 mr-1.5"></span>本機保存模式';
                 if (banner && showBanner) banner.classList.remove('hidden');
             }
         }
 
-        // 雲端即時監聽與初始化
-        function initCloudSync() {
-            if (!db) return;
-            const docRef = doc(db, "factory_system", "main_data");
-
-            onSnapshot(docRef, async (docSnap) => {
-                if (docSnap.exists()) {
-                    const cloudData = docSnap.data();
-                    if (cloudData && Array.isArray(cloudData.products)) {
-                        window.appData = {
-                            products: cloudData.products || [],
-                            sops: cloudData.sops || {},
-                            logs: cloudData.logs || []
-                        };
-                        persistLocal();
-                        if (typeof window.refreshAllViews === 'function') {
-                            window.refreshAllViews();
-                        }
-                        isCloudConnected = true;
-                        updateStatusBadge(true);
-                    }
-                } else {
-                    await window.saveData();
-                    isCloudConnected = true;
-                    updateStatusBadge(true);
-                }
-            }, (err) => {
-                isCloudConnected = false;
-                updateStatusBadge(false, true);
-            });
-        }
-
-        // 儲存資料（先存本機快取確保百分之百不遺失，再同步至雲端）
         window.saveData = async function() {
-            persistLocal();
+            try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(window.appData));
+            } catch (e) {}
+
             if (db) {
                 try {
                     await setDoc(doc(db, "factory_system", "main_data"), window.appData);
-                    isCloudConnected = true;
                     updateStatusBadge(true);
                 } catch (e) {
-                    isCloudConnected = false;
                     updateStatusBadge(false, true);
                 }
             }
         };
-
-        function persistLocal() {
-            try {
-                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(window.appData));
-            } catch (e) {
-                console.error("本地存檔失敗", e);
-            }
-        }
-
-        function loadLocalData() {
-            try {
-                const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-                if (stored) {
-                    const parsed = JSON.parse(stored);
-                    if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0) {
-                        window.appData = {
-                            products: parsed.products,
-                            sops: parsed.sops || {},
-                            logs: parsed.logs || []
-                        };
-                    }
-                }
-            } catch (e) {
-                console.warn("讀取本機資料異常", e);
-            }
-            if (typeof window.refreshAllViews === 'function') {
-                window.refreshAllViews();
-            }
-        }
 
         window.addEventListener('DOMContentLoaded', () => {
             const dateInput = document.getElementById('log-date');
@@ -913,7 +835,7 @@
         });
     </script>
 
-    <!-- 介面操作與計算邏輯 -->
+    <!-- 介面操作函數 -->
     <script>
         function showToast(message) {
             const toast = document.getElementById('toast-msg');
@@ -999,7 +921,6 @@
                 }
             });
 
-            // 更新篩選下拉選單
             const filterSelect = document.getElementById('filter-product');
             if (filterSelect) {
                 const prevFilter = filterSelect.value;
@@ -1085,7 +1006,7 @@
             await window.saveData();
             refreshAllViews();
             closeProductModal();
-            showToast('產品資料已儲存並同步至雲端！');
+            showToast('產品資料已儲存並同步！');
         }
 
         async function deleteProduct(productId) {
@@ -1192,7 +1113,7 @@
             };
 
             await window.saveData();
-            showToast('成型條件 SOP（含射出時間）已同步更新至雲端！');
+            showToast('成型條件 SOP（含射出時間）已同步至雲端！');
         }
 
         function updateLogStandardPreview() {
@@ -1229,7 +1150,7 @@
             document.getElementById('log-good-qty').value = '';
             document.getElementById('log-ng-qty').value = '0';
             document.getElementById('log-reason').value = '';
-            showToast('產程結案紀錄已新增並同步至雲端');
+            showToast('產程結案紀錄已新增並同步');
         }
 
         async function deleteLog(logId) {
@@ -1349,7 +1270,6 @@
                 ].join(',');
             });
 
-            // 加入 UTF-8 BOM 避免 Excel 開啟中文亂碼
             const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
@@ -1388,7 +1308,6 @@
             const totalMatWithLossKg = (netPartKg + runnerKg) * (1 + lossRate / 100);
             const bags25kg = Math.ceil(totalMatWithLossKg / 25);
 
-            // 單價與總額計算
             const totalProcessingFee = orderQty * unitProcessingPrice;
             const totalMatCost = totalMatWithLossKg * unitMaterialPrice;
             const totalCombinedCost = totalProcessingFee + totalMatCost;
@@ -1401,7 +1320,6 @@
             document.getElementById('res-total-hours').innerHTML = `${totalHoursNeeded.toFixed(1)} <span class="text-sm font-normal text-slate-500">小時</span>`;
             document.getElementById('res-total-days').textContent = `以每日開機 ${dailyHours} 小時計算，約需 ${totalDaysNeeded.toFixed(1)} 個工作天`;
 
-            // 單價與成本結果
             document.getElementById('res-total-processing-fee').textContent = `NT$ ${Math.round(totalProcessingFee).toLocaleString()}`;
             document.getElementById('res-unit-processing-hint').textContent = `單件代工: NT$ ${unitProcessingPrice.toFixed(2)} / pc`;
             document.getElementById('res-total-mat-cost').textContent = `NT$ ${Math.round(totalMatCost).toLocaleString()}`;
@@ -1445,6 +1363,20 @@
                         showToast('檔案格式不正確');
                     }
                 } catch (err) {
-                    showToast('讀取失敗：不是有效的 JSON 檔案');
+                    showToast('讀取失敗：不是有效的 JSON檔案');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        function refreshAllViews() {
+            renderProducts();
+            loadSopForSelectedProduct();
+            updateLogStandardPreview();
+            renderLogs();
+            runScheduleCalc();
+        }
+    </script>
 </body>
 </html>
