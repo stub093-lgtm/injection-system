@@ -624,6 +624,20 @@
 
         <!-- ==================== 模組四：生產試算（計算機） ==================== -->
         <section id="tab-calc" class="tab-content hidden space-y-4">
+            <!-- 用說的查詢 -->
+            <div class="bg-gradient-to-br from-blue-600 to-indigo-600 p-4 rounded-2xl shadow-sm text-white space-y-3">
+                <div class="flex items-center justify-between">
+                    <div class="font-bold"><i class="fa-solid fa-microphone mr-1.5"></i>用說的查詢</div>
+                    <label class="text-xs flex items-center gap-1.5 opacity-90"><input type="checkbox" id="quick-speak" checked>唸出答案</label>
+                </div>
+                <div class="flex gap-2">
+                    <input type="text" id="quick-q" placeholder="例：14.7cm 五萬個 要幾包料" onkeydown="if(event.key==='Enter'){this.blur();runQuickQuery(true)}" class="flex-1 min-w-0 rounded-xl px-3.5 py-3 text-base text-slate-800 outline-none">
+                    <button onclick="startVoice()" id="quick-mic" class="shrink-0 bg-white/20 hover:bg-white/30 rounded-xl w-12 text-xl" title="按一下開始說"><i class="fa-solid fa-microphone"></i></button>
+                    <button onclick="runQuickQuery(true)" class="shrink-0 bg-white text-blue-700 font-bold rounded-xl px-4">算</button>
+                </div>
+                <div id="quick-a" class="hidden bg-white/95 text-slate-800 rounded-xl p-3.5 text-base leading-relaxed"></div>
+                <div class="text-[11px] opacity-80">可以說：「14.7cm 五萬個要幾包料」「A01 還要開八小時要多少料」「14.7cm 三包料可以做幾個」</div>
+            </div>
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 <!-- 輸入 -->
                 <div class="lg:col-span-5 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
@@ -2063,6 +2077,204 @@
             });
         }
 
+        // ==================== 用說的查詢 ====================
+        // 中文數字 → 數字：支援「五萬」「1.5萬」「一萬五」「三千五」「十四點七」「二十四」
+        function cnNum(str) {
+            const D = { '零': '0', '〇': '0', '一': '1', '二': '2', '兩': '2', '三': '3', '四': '4', '五': '5', '六': '6', '七': '7', '八': '8', '九': '9', '點': '.' };
+            const U = { '十': 10, '百': 100, '千': 1000 };
+            let total = 0, section = 0, numStr = '', lastUnit = 1;
+            for (const ch of str) {
+                if (/[0-9.]/.test(ch) || D[ch] !== undefined) { numStr += D[ch] ?? ch; }
+                else if (U[ch]) { section += (numStr === '' ? 1 : parseFloat(numStr)) * U[ch]; lastUnit = U[ch]; numStr = ''; }
+                else if (ch === '萬') { section += numStr === '' ? 0 : parseFloat(numStr); total += (section || 1) * 10000; section = 0; lastUnit = 10000; numStr = ''; }
+            }
+            if (numStr !== '') {
+                let n = parseFloat(numStr);
+                // 口語省略單位：「一萬五」= 15000、「三千五」= 3500
+                if (lastUnit > 1 && numStr.length === 1) n = n * lastUnit / 10;
+                section += n;
+            }
+            return total + section;
+        }
+
+        function normText(t) {
+            return String(t || '')
+                .replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xfee0))   // 全形轉半形
+                .replace(/公分/g, 'cm').replace(/釐米|毫米|厘米/g, 'mm').replace(/公斤/g, 'kg')
+                .replace(/\s+/g, '').toLowerCase();
+        }
+
+        function parseQuickQuery(raw) {
+            const t = normText(raw);
+            const NUM = '[0-9.零〇一二兩三四五六七八九十百千萬點]+';
+            const out = { qty: null, hours: null, bags: null, kg: null, sizes: [], ask: null, rest: t };
+            const take = (re, fn) => { out.rest = out.rest.replace(re, (m, n) => { fn(cnNum(n)); return ' '; }); };
+            // 尺寸（14.7cm）留在 rest 裡給產品比對用，另外記一份
+            t.replace(new RegExp(`(${NUM})(cm|mm|吋)`, 'g'), (m, n, u) => { out.sizes.push(String(cnNum(n)) + u); });
+            take(new RegExp(`(${NUM})(?:個)?(?:小時|鐘頭|hr|h)`, 'g'), n => { out.hours = n; });
+            take(new RegExp(`(${NUM})分鐘`, 'g'), n => { out.hours = (out.hours || 0) + n / 60; });
+            take(new RegExp(`(${NUM})(?:包|袋)`, 'g'), n => { out.bags = n; });
+            take(new RegExp(`(${NUM})kg`, 'g'), n => { out.kg = n; });
+            take(new RegExp(`(${NUM})(?:個|件|支|顆|pcs|pc)`, 'g'), n => { out.qty = n; });
+            if (out.qty === null) {    // 沒寫單位的大數字，當作數量（例：「14.7cm 五萬 幾包」）
+                const m = out.rest.replace(new RegExp(`${NUM}(cm|mm|吋)`, 'g'), ' ').match(new RegExp(`(${NUM}萬|[0-9]{3,})`));
+                if (m) { out.qty = cnNum(m[1]); out.rest = out.rest.replace(m[1], ' '); }
+            }
+            if (/幾包|多少包|多少料|用料|幾公斤|幾kg|多少kg|多重|要多少原料/.test(t)) out.ask = 'material';
+            else if (/多久|幾小時|幾個小時|多少時間|幾天|什麼時候|何時|做完/.test(t)) out.ask = 'time';
+            else if (/幾個|多少個|能做|可以做|做多少/.test(t)) out.ask = 'qty';
+            return out;
+        }
+
+        function longestCommon(a, b) {
+            let best = 0;
+            for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) {
+                let k = 0;
+                while (a[i + k] && a[i + k] === b[j + k]) k++;
+                if (k > best) best = k;
+            }
+            return best;
+        }
+
+        function matchProduct(q) {
+            const prods = window.appData.products;
+            const text = normText(q.rest);
+            const scored = prods.map(p => {
+                const pn = normText(p.name), pc = normText(p.code);
+                let sc = 0;
+                if (pc && text.includes(pc)) sc += 20;
+                q.sizes.forEach(sz => {
+                    const num = sz.replace(/[a-z吋]+$/, '');
+                    if (pn.includes(sz) || pc.includes(sz)) sc += 12;
+                    else if (new RegExp(`(^|[^0-9.])${num.replace('.', '\\.')}([^0-9]|$)`).test(pn + ' ' + pc)) sc += 8;
+                });
+                // 品名與句子最長的共同中文片段（說「防水前蓋」也能對到「控制器防水前蓋」）
+                const cjk = x => x.replace(/[^\u4e00-\u9fff]/g, '');
+                const lcs = longestCommon(cjk(pn), cjk(text));
+                if (lcs >= 2) sc += lcs;
+                return { p, sc };
+            }).filter(x => x.sc > 0).sort((a, b) => b.sc - a.sc);
+            if (scored.length === 0) return { none: true };
+            const top = scored.filter(x => x.sc === scored[0].sc);
+            return top.length === 1 ? { product: top[0].p } : { choices: top.map(x => x.p) };
+        }
+
+        function speak(text) {
+            if (!document.getElementById('quick-speak').checked || !window.speechSynthesis) return;
+            try {
+                speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = 'zh-TW'; u.rate = 1.05;
+                speechSynthesis.speak(u);
+            } catch (e) {}
+        }
+
+        function runQuickQuery(say, forcedProductId) {
+            const raw = document.getElementById('quick-q').value.trim();
+            const box = document.getElementById('quick-a');
+            if (!raw) return;
+            box.classList.remove('hidden');
+            const q = parseQuickQuery(raw);
+            let product;
+            if (forcedProductId) product = window.appData.products.find(p => p.id === forcedProductId);
+            else {
+                const m = matchProduct(q);
+                if (m.product) product = m.product;
+                else if (m.choices) {
+                    box.innerHTML = `找到 ${m.choices.length} 個可能的產品，是哪一個？<div class="flex flex-wrap gap-2 mt-2">${m.choices.map(p => `<button onclick="runQuickQuery(true,'${esc(p.id)}')" class="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-1.5 text-sm font-semibold">${esc(p.name)}（${esc(p.code)}）</button>`).join('')}</div>`;
+                    if (say) speak('找到好幾個產品，請選一個');
+                    return;
+                } else {
+                    box.innerHTML = `找不到符合的產品。請說出<strong>品名或料號</strong>，例如「${esc(window.appData.products[0]?.name || '產品名稱')} 五萬個要幾包料」。`;
+                    if (say) speak('找不到這個產品，請說品名或料號');
+                    return;
+                }
+            }
+
+            // 帶入下方的試算表單，讓細節也看得到
+            document.getElementById('calc-product-select').value = product.id;
+            let mode;
+            if (q.hours !== null) { mode = 'hours'; document.getElementById('calc-hours').value = q.hours; }
+            else if (q.bags !== null || q.kg !== null) {
+                mode = 'material';
+                const kg = q.kg !== null ? q.kg : q.bags * BAG_KG;
+                document.getElementById('calc-kg').value = +kg.toFixed(1);
+                document.getElementById('calc-bags').value = +(kg / BAG_KG).toFixed(2);
+            } else if (q.qty !== null) { mode = 'qty'; document.getElementById('calc-qty').value = q.qty; }
+            else {
+                box.innerHTML = `已找到 <strong>${esc(product.name)}</strong>，但沒聽到數量。請再說「要做幾個」「開幾小時」或「有幾包料」。`;
+                if (say) speak(`${product.name}，請說要做幾個，或開幾小時`);
+                return;
+            }
+            setCalcMode(mode);
+
+            const loss = parseFloat(document.getElementById('calc-loss-rate').value) || 0;
+            const shotW = product.partWeight * product.cavities + product.runnerWeight;
+            const shots = mode === 'qty' ? Math.ceil(q.qty * (1 + loss / 100) / product.cavities)
+                : mode === 'hours' ? Math.floor(q.hours * 3600 / product.cycleTime)
+                : Math.floor((q.kg !== null ? q.kg : q.bags * BAG_KG) * 1000 / shotW);
+            const r = calcFromShots(product, shots, loss);
+            if (mode === 'qty') r.good = q.qty;
+            const bags = Math.ceil(r.kg / BAG_KG);
+
+            const parts = {
+                material: `需要 ${bags} 包料（${r.kg.toFixed(1)} 公斤）`,
+                time: `約 ${fmtHours(r.hours)}`,
+                qty: `可做約 ${r.good.toLocaleString()} 個`
+            };
+            const order = mode === 'qty' ? ['material', 'time'] : mode === 'hours' ? ['qty', 'material'] : ['qty', 'time'];
+            if (q.ask && order.includes(q.ask)) order.splice(order.indexOf(q.ask), 1), order.unshift(q.ask);
+            const head = mode === 'qty' ? `${product.name} 做 ${q.qty.toLocaleString()} 個`
+                : mode === 'hours' ? `${product.name} 開 ${q.hours} 小時`
+                : `${product.name} 用 ${q.kg !== null ? q.kg + ' 公斤' : q.bags + ' 包'}料`;
+            const sentence = `${head}，${order.map(k => parts[k]).join('，')}。`;
+            box.innerHTML = `<div class="font-bold text-lg">${esc(sentence)}</div>
+                <div class="text-xs text-slate-500 mt-1">${esc(product.code)} ・ ${product.cavities} 穴 ・ 週期 ${product.cycleTime}s ・ 損耗 ${loss}% ・ 預計完成 ${fmtFinish(r.hours)}（連續生產）</div>`;
+            if (say) speak(sentence);
+        }
+
+        // 麥克風：用瀏覽器的語音辨識；不支援時請使用者改用鍵盤上的麥克風
+        let recog = null;
+        function startVoice() {
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const input = document.getElementById('quick-q');
+            if (!SR) {
+                input.focus();
+                showToast('這個瀏覽器不支援直接收音：請按鍵盤上的 🎤 麥克風說話，說完按「算」');
+                return;
+            }
+            try {
+                if (recog) recog.abort();
+                recog = new SR();
+                recog.lang = 'zh-TW';
+                recog.interimResults = false;
+                recog.maxAlternatives = 1;
+                const btn = document.getElementById('quick-mic');
+                btn.classList.add('bg-rose-500', 'animate-pulse');
+                recog.onresult = (e) => { input.value = e.results[0][0].transcript; runQuickQuery(true); };
+                recog.onerror = (e) => {
+                    showToast(e.error === 'not-allowed' ? '請允許使用麥克風，或改用鍵盤上的 🎤' : '沒聽清楚，請再按一次說');
+                };
+                recog.onend = () => btn.classList.remove('bg-rose-500', 'animate-pulse');
+                recog.start();
+                showToast('請說話…');
+            } catch (e) {
+                input.focus();
+                showToast('無法啟動收音：請按鍵盤上的 🎤 麥克風說話');
+            }
+        }
+
+        // 從網址帶入問題（給 Siri 捷徑用）：…/injection-system/?q=14.7cm五萬個幾包料
+        let pendingQuery = new URLSearchParams(location.search).get('q');
+        function handlePendingQuery() {
+            if (!pendingQuery || !window.appData.products.length || !window.currentUser) return;
+            document.getElementById('quick-q').value = pendingQuery;
+            pendingQuery = null;
+            history.replaceState(null, '', location.pathname);
+            switchTab('tab-calc');
+            runQuickQuery(false);
+        }
+
         // ==================== 報價試算：報價 − 原料 = 剩餘 ====================
         const money = (v, d = 0) => `NT$ ${v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`;
         function runQuoteCalc() {
@@ -2433,6 +2645,7 @@
             renderLogs();
             runScheduleCalc();
             renderMembers();
+            handlePendingQuery();
         }
     </script>
 </body>
