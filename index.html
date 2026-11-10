@@ -7,13 +7,14 @@
     
     <!-- 手機桌面捷徑與全螢幕 Web App (PWA) 專屬設定 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="apple-mobile-web-app-title" content="射出管理">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#0f172a">
-    <!-- 桌面精準藍色工廠圖示 (SVG Data URI) -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%232563eb'/><text x='50%' y='54%' dominant-baseline='central' text-anchor='middle' font-size='55'>🏭</text></svg>">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%232563eb'/><text x='50%' y='54%' dominant-baseline='central' text-anchor='middle' font-size='55'>🏭</text></svg>">
+    <!-- App 圖示（iPhone 主畫面只吃 PNG）與 manifest -->
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="manifest" href="manifest.json">
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -606,7 +607,7 @@
                     <div>
                         <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
                             <i class="fa-solid fa-calculator text-blue-600"></i>
-                            訂單排程、用料與單價成本試算
+                            訂單排程、用料與報價試算
                         </h2>
                         <p class="text-xs text-slate-500 mt-1">精算工時、原料採購量與加工代工金額。</p>
                     </div>
@@ -691,26 +692,26 @@
                         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                             <div class="flex items-center gap-2">
                                 <i class="fa-solid fa-file-invoice-dollar text-amber-600"></i>
-                                <h3 class="font-bold text-slate-800">代工收入與費用金額分析 (Pricing & Cost Estimate)</h3>
+                                <h3 class="font-bold text-slate-800">訂單報價試算 (Quotation)</h3>
                             </div>
-                            <span class="text-xs font-bold bg-amber-100 text-amber-800 px-2.5 py-1 rounded-md">單價與成本估算</span>
+                            <span class="text-xs font-bold bg-amber-100 text-amber-800 px-2.5 py-1 rounded-md">報價 = 原料 + 代工</span>
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div class="bg-amber-50/70 p-4 rounded-xl border border-amber-200">
-                                <div class="text-xs font-bold text-amber-800">總代工費用收入</div>
+                                <div class="text-xs font-bold text-amber-800">代工費小計</div>
                                 <div class="text-2xl font-extrabold text-amber-700 mt-1" id="res-total-processing-fee">NT$ --</div>
-                                <div class="text-[11px] text-amber-600 mt-0.5" id="res-unit-processing-hint">單件加工: NT$ -- / pc</div>
+                                <div class="text-[11px] text-amber-600 mt-0.5" id="res-unit-processing-hint">每件代工: NT$ -- / pc</div>
                             </div>
                             <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                <div class="text-xs text-slate-500">原料採購總成本</div>
+                                <div class="text-xs text-slate-500">原料費小計（含料頭與損耗）</div>
                                 <div class="text-lg font-bold text-slate-800 mt-1" id="res-total-mat-cost">NT$ --</div>
                                 <div class="text-[11px] text-slate-500 mt-0.5" id="res-unit-mat-cost-hint">單件原料成本: NT$ --</div>
                             </div>
                             <div class="bg-blue-50/70 p-4 rounded-xl border border-blue-200">
-                                <div class="text-xs font-bold text-blue-800">每件預估總成本 (料+工)</div>
+                                <div class="text-xs font-bold text-blue-800">每件報價 (料+工)</div>
                                 <div class="text-2xl font-extrabold text-blue-700 mt-1" id="res-cost-per-pc">NT$ --</div>
-                                <div class="text-[11px] text-blue-600 mt-0.5" id="res-total-combined-cost">總成本: NT$ --</div>
+                                <div class="text-[11px] text-blue-600 mt-0.5" id="res-total-combined-cost">訂單報價總額: NT$ --</div>
                             </div>
                         </div>
                     </div>
@@ -1868,11 +1869,11 @@
             document.getElementById('res-total-days').textContent = `以每日開機 ${dailyHours} 小時計算，約需 ${totalDaysNeeded.toFixed(1)} 個工作天`;
 
             document.getElementById('res-total-processing-fee').textContent = `NT$ ${Math.round(totalProcessingFee).toLocaleString()}`;
-            document.getElementById('res-unit-processing-hint').textContent = `單件代工: NT$ ${unitProcessingPrice.toFixed(2)} / pc`;
+            document.getElementById('res-unit-processing-hint').textContent = `每件代工: NT$ ${unitProcessingPrice.toFixed(2)} / pc`;
             document.getElementById('res-total-mat-cost').textContent = `NT$ ${Math.round(totalMatCost).toLocaleString()}`;
             document.getElementById('res-unit-mat-cost-hint').textContent = `單件原料成本: NT$ ${unitMatCost.toFixed(2)}`;
             document.getElementById('res-cost-per-pc').textContent = `NT$ ${costPerPc.toFixed(2)}`;
-            document.getElementById('res-total-combined-cost').textContent = `代工+原料總計: NT$ ${Math.round(totalCombinedCost).toLocaleString()}`;
+            document.getElementById('res-total-combined-cost').textContent = `訂單報價總額: NT$ ${Math.round(totalCombinedCost).toLocaleString()}`;
 
             document.getElementById('res-mat-badge').textContent = product.material;
             document.getElementById('res-net-part-kg').textContent = `${netPartKg.toFixed(2)} kg`;
