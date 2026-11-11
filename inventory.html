@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>原料庫存</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="原料庫存">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #f1f5f9; }
+        .hidden { display: none; }
+        /* 權限顯示（沿用 MES 的角色：admin 管理者 / editor 技術員 / operator 作業員） */
+        body:not([data-role="admin"]) .need-admin { display: none !important; }
+        body:not([data-role="admin"]):not([data-role="editor"]) .need-editor { display: none !important; }
+        .seg button.on { background: #0f172a; color: #fff; }
+        input, select, textarea { font-size: 16px; } /* iPhone 輸入時不自動放大 */
+    </style>
+</head>
+<body class="min-h-screen pb-28">
+
+<!-- ===================== 登入畫面 ===================== -->
+<div id="auth-screen" class="fixed inset-0 z-[60] bg-slate-100 flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div class="text-center mb-5">
+            <div class="w-12 h-12 mx-auto rounded-xl bg-slate-900 text-white flex items-center justify-center text-xl"><i class="fa-solid fa-boxes-stacked"></i></div>
+            <h1 class="mt-3 text-lg font-bold text-slate-800">原料庫存</h1>
+            <p class="text-xs text-slate-500 mt-1">使用射出成型管理系統（MES）的帳號登入</p>
+        </div>
+        <div id="auth-loading" class="text-center text-sm text-slate-500 py-6"><i class="fa-solid fa-spinner fa-spin mr-2"></i>載入中…</div>
+        <form id="auth-login" class="hidden space-y-3" onsubmit="authSubmit(event)">
+            <div>
+                <label class="text-xs font-medium text-slate-600">Email</label>
+                <input type="email" id="auth-email" required autocomplete="username" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="text-xs font-medium text-slate-600">密碼</label>
+                <input type="password" id="auth-password" required minlength="6" autocomplete="current-password" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl text-sm">登入</button>
+            <p class="text-xs text-slate-500 text-center">還沒有帳號或忘記密碼？請到 <a href="index.html" class="text-blue-600 underline">MES</a> 註冊／重設</p>
+        </form>
+        <div id="auth-blocked" class="hidden text-sm text-slate-700 space-y-3">
+            <p id="auth-blocked-text"></p>
+            <a href="index.html" class="block text-center w-full bg-blue-600 text-white font-medium py-2.5 rounded-xl">前往 MES</a>
+            <button onclick="api.logout()" class="w-full text-slate-500 text-xs underline">登出</button>
+        </div>
+        <div id="auth-offline" class="hidden text-sm text-slate-700 text-center space-y-2">
+            <p><i class="fa-solid fa-wifi text-amber-500 mr-1"></i>無法連線雲端，請確認網路後重新整理。</p>
+        </div>
+    </div>
+</div>
+
+<!-- ===================== 頂部 ===================== -->
+<header class="bg-slate-900 text-white sticky top-0 z-30">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <i class="fa-solid fa-boxes-stacked text-emerald-400"></i>
+            <span class="font-bold">原料庫存</span>
+            <span id="sync-badge" class="text-[11px] text-slate-400 ml-1"></span>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+            <a href="index.html" class="text-slate-300 hover:text-white"><i class="fa-solid fa-industry mr-1"></i>MES</a>
+            <span id="user-chip" class="hidden sm:inline text-slate-400"></span>
+            <button onclick="api.logout()" class="text-slate-300 hover:text-white"><i class="fa-solid fa-right-from-bracket"></i></button>
+        </div>
+    </div>
+    <nav class="max-w-5xl mx-auto px-2 flex text-sm">
+        <button data-tab="stock" onclick="switchTab('stock')" class="tab-btn flex-1 py-2.5 border-b-2">庫存</button>
+        <button data-tab="moves" onclick="switchTab('moves')" class="tab-btn flex-1 py-2.5 border-b-2">紀錄</button>
+        <button data-tab="settings" onclick="switchTab('settings')" class="tab-btn flex-1 py-2.5 border-b-2 need-editor">設定</button>
+    </nav>
+</header>
+
+<main class="max-w-5xl mx-auto px-4 py-4">
+    <!-- ===== 庫存 ===== -->
+    <section id="tab-stock">
+        <div id="reorder-banner" class="hidden mb-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm"></div>
+        <div class="flex gap-2 mb-3">
+            <input id="stock-search" oninput="renderStock()" placeholder="搜尋 基材／顏色／備註" class="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500">
+            <select id="stock-flow" onchange="renderStock()" class="bg-white border border-slate-300 rounded-xl px-2 py-2">
+                <option value="">全部流動</option><option value="高">高流動</option><option value="低">低流動</option>
+            </select>
+        </div>
+        <label class="flex items-center gap-2 text-sm text-slate-600 mb-3">
+            <input type="checkbox" id="stock-low-only" onchange="renderStock()" class="w-4 h-4"> 只看低於安全庫存
+        </label>
+        <div id="stock-list" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+    </section>
+
+    <!-- ===== 紀錄 ===== -->
+    <section id="tab-moves" class="hidden">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+            <select id="mv-material" onchange="renderMoves()" class="bg-white border border-slate-300 rounded-xl px-2 py-2 col-span-2"></select>
+            <select id="mv-type" onchange="renderMoves()" class="bg-white border border-slate-300 rounded-xl px-2 py-2">
+                <option value="">全部類型</option><option value="in">進料</option><option value="out">領料</option><option value="adjust">盤點調整</option>
+            </select>
+            <input type="month" id="mv-month" onchange="renderMoves()" class="bg-white border border-slate-300 rounded-xl px-2 py-2">
+        </div>
+        <div id="mv-summary" class="text-sm text-slate-600 mb-2"></div>
+        <div id="mv-list" class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100"></div>
+    </section>
+
+    <!-- ===== 設定 ===== -->
+    <section id="tab-settings" class="hidden space-y-6">
+        <div>
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="font-bold text-slate-800">原料品項</h2>
+                <button onclick="openMaterialForm()" class="bg-slate-900 text-white text-sm px-3 py-1.5 rounded-lg"><i class="fa-solid fa-plus mr-1"></i>新增原料</button>
+            </div>
+            <p class="text-xs text-slate-500 mb-2">品項 = 基材＋顏色＋高／低流動。MI 值或牌號寫在備註；同一個流動等級真的有不能互換的料，再拆成兩個品項。</p>
+            <div id="material-admin-list" class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100"></div>
+        </div>
+        <div>
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="font-bold text-slate-800">供應商</h2>
+                <button onclick="openSupplierForm()" class="bg-slate-900 text-white text-sm px-3 py-1.5 rounded-lg"><i class="fa-solid fa-plus mr-1"></i>新增供應商</button>
+            </div>
+            <div id="supplier-admin-list" class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100"></div>
+        </div>
+    </section>
+</main>
+
+<!-- 新增異動按鈕 -->
+<button id="fab" onclick="openMoveForm()" class="fixed bottom-6 right-5 z-20 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg px-5 py-3.5 font-medium">
+    <i class="fa-solid fa-plus mr-1"></i>新增進出
+</button>
+
+<!-- ===================== 對話框 ===================== -->
+<div id="modal" class="hidden fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onclick="if(event.target===this)closeModal()">
+    <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl max-h-[92vh] overflow-y-auto p-5" id="modal-body"></div>
+</div>
+
+<div id="toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2.5 rounded-xl text-sm opacity-0 pointer-events-none transition-opacity duration-300 z-[70]"></div>
+
+<!-- ===================== 純計算（無 DOM，可單獨測試） ===================== -->
+<script id="inv-core">
+const INV = (() => {
+    const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+    const fmtKg = (n) => {
+        const v = round2(n);
+        return v.toLocaleString('zh-TW', { maximumFractionDigits: 2 });
+    };
+    const TYPE_LABEL = { in: '進料', out: '領料', adjust: '盤點調整' };
+
+    function materialName(m) {
+        if (!m) return '（已刪除的原料）';
+        return [m.base, m.color, m.flow ? m.flow + '流動' : ''].filter(Boolean).join(' ');
+    }
+
+    // 每筆異動的 kg 是「帶正負號的變化量」：進料 +、領料 −、盤點調整 = 實盤 − 帳面
+    function stockByMaterial(moves) {
+        const s = {};
+        for (const mv of moves) s[mv.materialId] = round2((s[mv.materialId] || 0) + (Number(mv.kg) || 0));
+        return s;
+    }
+
+    // 包數換算：只是顯示用，零包會有小數
+    function bagsOf(kg, bagKg) {
+        const b = Number(bagKg) || 25;
+        return Math.round((kg / b) * 10) / 10;
+    }
+
+    // 狀態：negative 負庫存 / low 低於安全庫存 / ok
+    function status(kg, safetyKg) {
+        if (kg < 0) return 'negative';
+        if (Number(safetyKg) > 0 && kg < Number(safetyKg)) return 'low';
+        return 'ok';
+    }
+
+    // 由表單輸入算出要存的變化量
+    // input: { type, unit:'bag'|'kg', bags, bagKg, kg, countedKg, currentKg }
+    function computeDelta(input) {
+        const t = input.type;
+        if (t === 'adjust') {
+            const counted = Number(input.countedKg);
+            if (!(counted >= 0) || input.countedKg === '' || input.countedKg == null) return { error: '請輸入實際盤點重量' };
+            return { kg: round2(counted - (Number(input.currentKg) || 0)), countedKg: round2(counted) };
+        }
+        let qty;
+        if (input.unit === 'bag') {
+            const bags = Number(input.bags), per = Number(input.bagKg);
+            if (!(bags > 0)) return { error: '請輸入包數' };
+            if (!(per > 0)) return { error: '請輸入每包重量' };
+            qty = round2(bags * per);
+        } else {
+            qty = round2(Number(input.kg));
+            if (!(qty > 0)) return { error: '請輸入重量（kg）' };
+        }
+        return { kg: t === 'out' ? -qty : qty };
+    }
+
+    return { round2, fmtKg, TYPE_LABEL, materialName, stockByMaterial, bagsOf, status, computeDelta };
+})();
+if (typeof module !== 'undefined') module.exports = INV;
+</script>
+
+<!-- ===================== 雲端層 ===================== -->
+<script type="module">
+const FB_VER = '9.22.1';
+// 與 MES（index.html）相同的 Firebase 專案；同一個網站，登入狀態共用
+const firebaseConfig = {
+    apiKey: "AIzaSyDqFzF8L3N1-gxmycxJc8Y4FFQKXiNN2ds",
+    authDomain: "sunghsing.firebaseapp.com",
+    databaseURL: "https://sunghsing-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "sunghsing",
+    storageBucket: "sunghsing.firebasestorage.app",
+    messagingSenderId: "12105900713",
+    appId: "1:12105900713:web:c747d7d6a82f754b90ffb8",
+    measurementId: "G-CQNZHLEVHD"
+};
+// 庫存專用的 collections，前綴 inv 避免跟 MES 撞名
+const COL = { materials: 'invMaterials', suppliers: 'invSuppliers', moves: 'invMoves' };
+const ROLE_LABEL = { admin: '管理者', editor: '技術員', operator: '作業員' };
+
+window.inv = { materials: [], suppliers: [], moves: [] };
+window.currentUser = null;
+
+let fa, fs, auth, db;
+let unsubs = [], memberUnsub = null;
+const syncMeta = {};
+const $ = (id) => document.getElementById(id);
+const emailKey = (e) => String(e || '').trim().toLowerCase();
+
+function showScreen(name, text) {
+    ['auth-loading', 'auth-login', 'auth-blocked', 'auth-offline'].forEach(id => $(id).classList.add('hidden'));
+    if (name === 'app') { $('auth-screen').classList.add('hidden'); return; }
+    $('auth-screen').classList.remove('hidden');
+    $('auth-' + name).classList.remove('hidden');
+    if (text) $('auth-blocked-text').textContent = text;
+}
+
+function updateSync() {
+    const m = Object.values(syncMeta);
+    let t = '● 已同步', c = 'text-emerald-400';
+    if (m.some(x => x.hasPendingWrites)) { t = '● 同步中…'; c = 'text-sky-400'; }
+    else if (m.some(x => x.fromCache)) { t = '● 離線（連線後自動上傳）'; c = 'text-amber-400'; }
+    const el = $('sync-badge'); el.textContent = t; el.className = 'text-[11px] ml-1 ' + c;
+}
+
+function errMsg(e) {
+    const code = e?.code || '';
+    const map = {
+        'permission-denied': '權限不足：Firestore 規則尚未開放，或您的角色無法執行此操作',
+        'auth/invalid-email': 'Email 格式不正確',
+        'auth/user-not-found': '帳號或密碼錯誤',
+        'auth/wrong-password': '帳號或密碼錯誤',
+        'auth/invalid-credential': '帳號或密碼錯誤',
+        'auth/invalid-login-credentials': '帳號或密碼錯誤',
+        'auth/too-many-requests': '嘗試次數過多，請稍後再試',
+        'auth/network-request-failed': '網路連線失敗'
+    };
+    return map[code] || `操作失敗（${code || e?.message || '未知錯誤'}）`;
+}
+function bg(p) { p.catch(e => { console.warn(e); window.toast(errMsg(e)); }); }
+
+let refreshTimer = null;
+function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => window.renderAll && window.renderAll(), 60); }
+
+function listen(key, ref, onData) {
+    unsubs.push(fs.onSnapshot(ref, { includeMetadataChanges: true }, snap => {
+        syncMeta[key] = { fromCache: snap.metadata.fromCache, hasPendingWrites: snap.metadata.hasPendingWrites };
+        updateSync(); onData(snap); scheduleRefresh();
+    }, err => { console.warn(key, err); window.toast(errMsg(err)); }));
+}
+function stopListeners() { unsubs.forEach(u => u()); unsubs = []; Object.keys(syncMeta).forEach(k => delete syncMeta[k]); }
+
+function startListeners() {
+    stopListeners();
+    const rows = snap => snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    listen('materials', fs.collection(db, COL.materials), s => { window.inv.materials = rows(s); });
+    listen('suppliers', fs.collection(db, COL.suppliers), s => { window.inv.suppliers = rows(s); });
+    listen('moves', fs.collection(db, COL.moves), s => {
+        window.inv.moves = rows(s).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
+    });
+}
+
+const stamp = () => ({ updatedAt: new Date().toISOString(), updatedBy: window.currentUser?.email || '' });
+const strip = ({ id, ...rest }) => rest;
+
+window.api = {
+    async signIn(email, pw) { await fa.signInWithEmailAndPassword(auth, email.trim(), pw); },
+    async logout() { await fa.signOut(auth); },
+    newId(col) { return fs.doc(fs.collection(db, COL[col])).id; },
+    saveMaterial(m) { bg(fs.setDoc(fs.doc(db, COL.materials, m.id), { ...strip(m), ...stamp() })); },
+    deleteMaterial(id) { bg(fs.deleteDoc(fs.doc(db, COL.materials, id))); },
+    saveSupplier(s) { bg(fs.setDoc(fs.doc(db, COL.suppliers, s.id), { ...strip(s), ...stamp() })); },
+    deleteSupplier(id) { bg(fs.deleteDoc(fs.doc(db, COL.suppliers, id))); },
+    addMove(mv) {
+        bg(fs.setDoc(fs.doc(db, COL.moves, mv.id), {
+            ...strip(mv),
+            createdAt: new Date().toISOString(),
+            createdBy: window.currentUser.email,
+            createdByName: window.currentUser.name || ''
+        }));
+    },
+    deleteMove(id) { bg(fs.deleteDoc(fs.doc(db, COL.moves, id))); }
+};
+
+function handleUser(user) {
+    if (memberUnsub) { memberUnsub(); memberUnsub = null; }
+    stopListeners();
+    window.currentUser = null;
+    window.inv = { materials: [], suppliers: [], moves: [] };
+    if (!user) { document.body.dataset.role = ''; showScreen('login'); return; }
+    if (!user.emailVerified) { showScreen('blocked', `${user.email} 尚未完成 Email 驗證，請到 MES 完成驗證。`); return; }
+    const email = emailKey(user.email);
+    showScreen('loading');
+    memberUnsub = fs.onSnapshot(fs.doc(db, 'members', email), snap => {
+        if (!snap.exists()) {
+            stopListeners(); window.currentUser = null; document.body.dataset.role = '';
+            showScreen('blocked', `${email} 尚未開通。請先到 MES 登入一次送出申請，由管理者核准。`);
+            return;
+        }
+        const m = snap.data();
+        const changed = window.currentUser?.role !== m.role;
+        window.currentUser = { email, name: m.name || user.displayName || '', role: m.role };
+        document.body.dataset.role = m.role;
+        $('user-chip').textContent = `${window.currentUser.name || email}（${ROLE_LABEL[m.role] || m.role}）`;
+        if (changed) startListeners();
+        showScreen('app');
+        scheduleRefresh();
+    }, err => { console.warn(err); showScreen('blocked', '讀取權限失敗：' + errMsg(err)); });
+}
+
+(async () => {
+    try {
+        const [appMod, authMod, fsMod] = await Promise.all([
+            import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app.js`),
+            import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-auth.js`),
+            import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-firestore.js`)
+        ]);
+        fa = authMod; fs = fsMod;
+        fs.setLogLevel('silent');
+        const app = appMod.initializeApp(firebaseConfig);
+        auth = fa.getAuth(app);
+        auth.languageCode = 'zh-TW';
+        db = fs.getFirestore(app);
+        // MES 開在另一個分頁時會拿不到離線快取，屬正常，仍可線上使用
+        fs.enableIndexedDbPersistence(db).catch(e => console.warn('離線快取未啟用:', e.code));
+        fa.onAuthStateChanged(auth, handleUser);
+    } catch (e) {
+        console.warn('Firebase 載入失敗', e);
+        showScreen('offline');
+    }
+})();
+</script>
+
+<!-- ===================== 畫面邏輯 ===================== -->
+<script>
+const $ = (id) => document.getElementById(id);
+function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function todayLocal() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+const role = () => window.currentUser?.role;
+const canEdit = () => role() === 'admin' || role() === 'editor';
+const isAdmin = () => role() === 'admin';
+
+window.toast = function (msg) {
+    const t = $('toast'); t.textContent = msg; t.style.opacity = 1;
+    clearTimeout(t._h); t._h = setTimeout(() => t.style.opacity = 0, 2500);
+};
+
+async function authSubmit(e) {
+    e.preventDefault();
+    try { await api.signIn($('auth-email').value, $('auth-password').value); }
+    catch (err) { toast(err.code ? ({ 'auth/invalid-credential': '帳號或密碼錯誤', 'auth/invalid-login-credentials': '帳號或密碼錯誤', 'auth/wrong-password': '帳號或密碼錯誤', 'auth/user-not-found': '帳號或密碼錯誤', 'auth/too-many-requests': '嘗試次數過多，請稍後再試' }[err.code] || err.code) : '登入失敗'); }
+}
+
+// ---------- 分頁 ----------
+let currentTab = 'stock';
+function switchTab(tab) {
+    if (tab === 'settings' && !canEdit()) tab = 'stock';
+    currentTab = tab;
+    ['stock', 'moves', 'settings'].forEach(t => $('tab-' + t).classList.toggle('hidden', t !== tab));
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        const on = b.dataset.tab === tab;
+        b.classList.toggle('border-emerald-400', on); b.classList.toggle('text-white', on);
+        b.classList.toggle('border-transparent', !on); b.classList.toggle('text-slate-400', !on);
+    });
+}
+
+// ---------- 共用資料 ----------
+function materialsSorted(includeInactive) {
+    return inv.materials.filter(m => includeInactive || m.active !== false)
+        .sort((a, b) => INV.materialName(a).localeCompare(INV.materialName(b), 'zh-Hant'));
+}
+function findMaterial(id) { return inv.materials.find(m => m.id === id); }
+function stockMap() { return INV.stockByMaterial(inv.moves); }
+
+function renderAll() {
+    renderStock(); renderMoveFilters(); renderMoves(); renderSettings(); switchTab(currentTab);
+}
+window.renderAll = renderAll;
+
+// ---------- 庫存 ----------
+function renderStock() {
+    const s = stockMap();
+    const q = $('stock-search').value.trim().toLowerCase();
+    const flow = $('stock-flow').value;
+    const lowOnly = $('stock-low-only').checked;
+    const all = materialsSorted(false);
+
+    const alerts = all.filter(m => INV.status(s[m.id] || 0, m.safetyKg) !== 'ok');
+    const banner = $('reorder-banner');
+    banner.classList.toggle('hidden', alerts.length === 0);
+    banner.innerHTML = alerts.length ? `<i class="fa-solid fa-triangle-exclamation mr-1"></i><b>${alerts.length} 項需要叫貨：</b>${alerts.map(m => esc(INV.materialName(m))).join('、')}` : '';
+
+    const list = all.filter(m => {
+        if (flow && m.flow !== flow) return false;
+        if (lowOnly && INV.status(s[m.id] || 0, m.safetyKg) === 'ok') return false;
+        if (q && !`${INV.materialName(m)} ${m.note || ''}`.toLowerCase().includes(q)) return false;
+        return true;
+    });
+
+    if (!inv.materials.length) {
+        $('stock-list').innerHTML = `<div class="col-span-full text-center text-slate-500 text-sm py-10">還沒有原料品項。${canEdit() ? '請先到「設定」新增原料。' : '請管理者或技術員到「設定」新增原料。'}</div>`;
+        return;
+    }
+    if (!list.length) { $('stock-list').innerHTML = `<div class="col-span-full text-center text-slate-500 text-sm py-10">沒有符合的原料</div>`; return; }
+
+    $('stock-list').innerHTML = list.map(m => {
+        const kg = s[m.id] || 0;
+        const st = INV.status(kg, m.safetyKg);
+        const box = st === 'ok' ? 'border-slate-200 bg-white' : 'border-red-300 bg-red-50';
+        const num = st === 'ok' ? 'text-slate-900' : 'text-red-600';
+        const tag = st === 'negative' ? '<span class="text-[11px] bg-red-600 text-white px-1.5 py-0.5 rounded">負庫存</span>'
+            : st === 'low' ? '<span class="text-[11px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded">低於安全量</span>' : '';
+        return `<div class="rounded-xl border ${box} p-4">
+            <div class="flex items-start justify-between gap-2">
+                <div>
+                    <div class="font-bold text-slate-800">${esc(INV.materialName(m))}</div>
+                    ${m.note ? `<div class="text-xs text-slate-500 mt-0.5">${esc(m.note)}</div>` : ''}
+                </div>${tag}
+            </div>
+            <div class="mt-3 flex items-end justify-between">
+                <div>
+                    <div class="text-2xl font-bold ${num}">${INV.fmtKg(kg)} <span class="text-sm font-medium">kg</span></div>
+                    <div class="text-xs text-slate-500">約 ${INV.bagsOf(kg, m.bagKg)} 包${Number(m.safetyKg) > 0 ? `・安全量 ${INV.fmtKg(m.safetyKg)} kg` : ''}</div>
+                </div>
+                <div class="flex gap-1.5">
+                    <button onclick="openMoveForm('${m.id}','in')" class="text-xs bg-emerald-600 text-white px-2.5 py-1.5 rounded-lg">進料</button>
+                    <button onclick="openMoveForm('${m.id}','out')" class="text-xs bg-orange-500 text-white px-2.5 py-1.5 rounded-lg">領料</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// ---------- 紀錄 ----------
+function renderMoveFilters() {
+    const sel = $('mv-material'); const cur = sel.value;
+    sel.innerHTML = `<option value="">全部原料</option>` + materialsSorted(true).map(m => `<option value="${m.id}">${esc(INV.materialName(m))}${m.active === false ? '（停用）' : ''}</option>`).join('');
+    sel.value = cur;
+}
+function renderMoves() {
+    const mid = $('mv-material').value, type = $('mv-type').value, month = $('mv-month').value;
+    const list = inv.moves.filter(mv => (!mid || mv.materialId === mid) && (!type || mv.type === type) && (!month || (mv.date || '').startsWith(month)));
+    const sumIn = list.filter(x => x.type === 'in').reduce((a, x) => a + x.kg, 0);
+    const sumOut = list.filter(x => x.type === 'out').reduce((a, x) => a - x.kg, 0);
+    $('mv-summary').innerHTML = `共 ${list.length} 筆・進料 <b class="text-emerald-700">${INV.fmtKg(sumIn)}</b> kg・領料 <b class="text-orange-600">${INV.fmtKg(sumOut)}</b> kg`;
+    if (!list.length) { $('mv-list').innerHTML = `<div class="text-center text-slate-500 text-sm py-8">沒有紀錄</div>`; return; }
+    const color = { in: 'bg-emerald-100 text-emerald-700', out: 'bg-orange-100 text-orange-700', adjust: 'bg-violet-100 text-violet-700' };
+    $('mv-list').innerHTML = list.slice(0, 500).map(mv => {
+        const m = findMaterial(mv.materialId);
+        const sign = mv.kg > 0 ? '+' : '';
+        const extra = [
+            mv.bags ? `${mv.bags} 包 × ${INV.fmtKg(mv.bagKg)} kg` : '',
+            mv.type === 'adjust' ? `實盤 ${INV.fmtKg(mv.countedKg)} kg` : '',
+            mv.supplierName ? `供應商：${esc(mv.supplierName)}` : '',
+            mv.note ? esc(mv.note) : ''
+        ].filter(Boolean).join('・');
+        return `<div class="px-4 py-3 flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <div class="text-sm"><span class="text-[11px] px-1.5 py-0.5 rounded ${color[mv.type] || ''}">${INV.TYPE_LABEL[mv.type] || mv.type}</span>
+                    <span class="font-medium text-slate-800 ml-1">${esc(INV.materialName(m))}</span></div>
+                <div class="text-xs text-slate-500 mt-1">${esc(mv.date)}・${esc(mv.createdByName || mv.createdBy)}${extra ? '・' + extra : ''}</div>
+            </div>
+            <div class="text-right shrink-0">
+                <div class="font-bold ${mv.kg < 0 ? 'text-orange-600' : 'text-emerald-700'}">${sign}${INV.fmtKg(mv.kg)} kg</div>
+                <button onclick="confirmDeleteMove('${mv.id}')" class="need-admin text-[11px] text-slate-400 hover:text-red-600 mt-1">刪除</button>
+            </div>
+        </div>`;
+    }).join('') + (list.length > 500 ? `<div class="text-center text-xs text-slate-400 py-2">只顯示最近 500 筆，請用篩選縮小範圍</div>` : '');
+}
+function confirmDeleteMove(id) {
+    if (!isAdmin()) return;
+    if (confirmTwice !== id) { confirmTwice = id; toast('再按一次「刪除」確認'); setTimeout(() => { if (confirmTwice === id) confirmTwice = null; }, 3000); return; }
+    confirmTwice = null; api.deleteMove(id); toast('已刪除');
+}
+let confirmTwice = null;
+
+// ---------- 對話框 ----------
+function openModal(html) { $('modal-body').innerHTML = html; $('modal').classList.remove('hidden'); }
+function closeModal() { $('modal').classList.add('hidden'); }
+const inputCls = 'w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500';
+const lbl = (t) => `<label class="text-xs font-medium text-slate-600">${t}</label>`;
+
+// ---------- 新增進出 ----------
+let mvState = null;
+function openMoveForm(materialId, type) {
+    const mats = materialsSorted(false);
+    if (!mats.length) { toast(canEdit() ? '請先到「設定」新增原料' : '尚未建立原料品項'); if (canEdit()) switchTab('settings'); return; }
+    mvState = { type: type || 'in', unit: 'bag' };
+    const sups = inv.suppliers.filter(s => s.active !== false).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-Hant'));
+    openModal(`
+        <div class="flex items-center justify-between mb-4"><h3 class="font-bold text-lg">新增進出</h3><button onclick="closeModal()" class="text-slate-400 text-xl">&times;</button></div>
+        <div class="seg grid ${canEdit() ? 'grid-cols-3' : 'grid-cols-2'} gap-1 bg-slate-100 p-1 rounded-xl mb-4" id="mv-type-seg">
+            <button type="button" data-v="in" onclick="setMvType('in')" class="py-2 rounded-lg text-sm">進料</button>
+            <button type="button" data-v="out" onclick="setMvType('out')" class="py-2 rounded-lg text-sm">領料</button>
+            ${canEdit() ? `<button type="button" data-v="adjust" onclick="setMvType('adjust')" class="py-2 rounded-lg text-sm">盤點</button>` : ''}
+        </div>
+        <div class="space-y-3">
+            <div>${lbl('原料')}<select id="f-mat" onchange="syncBagKg();updateMvPreview()" class="${inputCls}">${mats.map(m => `<option value="${m.id}">${esc(INV.materialName(m))}${m.note ? '（' + esc(m.note) + '）' : ''}</option>`).join('')}</select></div>
+            <div>${lbl('日期')}<input type="date" id="f-date" value="${todayLocal()}" class="${inputCls}"></div>
+            <div id="f-qty-normal">
+                <div class="seg grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl mb-2" id="mv-unit-seg">
+                    <button type="button" data-v="bag" onclick="setMvUnit('bag')" class="py-1.5 rounded-lg text-sm">用包數</button>
+                    <button type="button" data-v="kg" onclick="setMvUnit('kg')" class="py-1.5 rounded-lg text-sm">直接輸入 kg</button>
+                </div>
+                <div id="f-bag-row" class="grid grid-cols-2 gap-2">
+                    <div>${lbl('包數')}<input type="number" inputmode="decimal" step="any" min="0" id="f-bags" oninput="updateMvPreview()" class="${inputCls}"></div>
+                    <div>${lbl('每包 kg')}<input type="number" inputmode="decimal" step="any" min="0" id="f-bagkg" oninput="updateMvPreview()" class="${inputCls}"></div>
+                </div>
+                <div id="f-kg-row" class="hidden">${lbl('重量 kg（不足一包時用這個）')}<input type="number" inputmode="decimal" step="any" min="0" id="f-kg" oninput="updateMvPreview()" class="${inputCls}"></div>
+            </div>
+            <div id="f-qty-adjust" class="hidden">${lbl('實際盤點重量 kg')}<input type="number" inputmode="decimal" step="any" min="0" id="f-counted" oninput="updateMvPreview()" class="${inputCls}"></div>
+            <div id="f-sup-row">${lbl('供應商（選填）')}<select id="f-sup" class="${inputCls}"><option value="">—</option>${sups.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></div>
+            <div>${lbl('備註（選填）')}<input id="f-note" class="${inputCls}" placeholder="例如：單號、用在哪個產品"></div>
+            <div id="f-preview" class="text-sm rounded-xl bg-slate-50 border border-slate-200 px-3 py-2"></div>
+            <button onclick="submitMove()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl">儲存</button>
+        </div>`);
+    if (materialId) $('f-mat').value = materialId;
+    syncBagKg();
+    setMvType(mvState.type);
+    setMvUnit('bag');
+}
+function syncBagKg() { const m = findMaterial($('f-mat').value); $('f-bagkg').value = m?.bagKg || 25; }
+function setMvType(t) {
+    mvState.type = t;
+    document.querySelectorAll('#mv-type-seg button').forEach(b => b.classList.toggle('on', b.dataset.v === t));
+    $('f-qty-normal').classList.toggle('hidden', t === 'adjust');
+    $('f-qty-adjust').classList.toggle('hidden', t !== 'adjust');
+    $('f-sup-row').classList.toggle('hidden', t !== 'in');
+    updateMvPreview();
+}
+function setMvUnit(u) {
+    mvState.unit = u;
+    document.querySelectorAll('#mv-unit-seg button').forEach(b => b.classList.toggle('on', b.dataset.v === u));
+    $('f-bag-row').classList.toggle('hidden', u !== 'bag');
+    $('f-kg-row').classList.toggle('hidden', u !== 'kg');
+    updateMvPreview();
+}
+function readMvInput() {
+    const current = stockMap()[$('f-mat').value] || 0;
+    return { type: mvState.type, unit: mvState.unit, bags: $('f-bags').value, bagKg: $('f-bagkg').value, kg: $('f-kg').value, countedKg: $('f-counted').value, currentKg: current };
+}
+function updateMvPreview() {
+    if (!mvState) return;
+    const inp = readMvInput();
+    const r = INV.computeDelta(inp);
+    const el = $('f-preview');
+    if (r.error) { el.className = 'text-sm rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-slate-500'; el.textContent = `目前庫存 ${INV.fmtKg(inp.currentKg)} kg`; return; }
+    const after = INV.round2(inp.currentKg + r.kg);
+    const neg = after < 0;
+    el.className = `text-sm rounded-xl px-3 py-2 border ${neg ? 'bg-red-50 border-red-300 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-700'}`;
+    el.innerHTML = `目前 ${INV.fmtKg(inp.currentKg)} kg → <b>${INV.fmtKg(after)} kg</b>（${r.kg >= 0 ? '+' : ''}${INV.fmtKg(r.kg)}）`
+        + (neg ? '<br>⚠ 存檔後會變成負庫存，可能有進料還沒登記，仍可儲存。' : '');
+}
+function submitMove() {
+    const inp = readMvInput();
+    const r = INV.computeDelta(inp);
+    if (r.error) { toast(r.error); return; }
+    const date = $('f-date').value;
+    if (!date) { toast('請選擇日期'); return; }
+    if (inp.type === 'adjust' && r.kg === 0) { toast('實盤與帳面相同，不需要調整'); return; }
+    const sup = inp.type === 'in' ? inv.suppliers.find(s => s.id === $('f-sup').value) : null;
+    const mv = {
+        id: api.newId('moves'), type: inp.type, materialId: $('f-mat').value, date, kg: r.kg,
+        note: $('f-note').value.trim()
+    };
+    if (inp.type === 'adjust') { mv.countedKg = r.countedKg; mv.bookKg = INV.round2(inp.currentKg); }
+    else if (inp.unit === 'bag') { mv.bags = Number(inp.bags); mv.bagKg = Number(inp.bagKg); }
+    if (sup) { mv.supplierId = sup.id; mv.supplierName = sup.name; }
+    api.addMove(mv);
+    closeModal(); mvState = null;
+    toast(`已記錄 ${INV.TYPE_LABEL[mv.type]} ${mv.kg >= 0 ? '+' : ''}${INV.fmtKg(mv.kg)} kg`);
+}
+
+// ---------- 設定：原料 ----------
+function renderSettings() {
+    if (!canEdit()) return;
+    const usage = {}; inv.moves.forEach(mv => usage[mv.materialId] = (usage[mv.materialId] || 0) + 1);
+    const mats = materialsSorted(true);
+    $('material-admin-list').innerHTML = mats.length ? mats.map(m => `
+        <div class="px-4 py-3 flex items-center justify-between gap-2 ${m.active === false ? 'opacity-50' : ''}">
+            <div class="min-w-0"><div class="font-medium text-slate-800">${esc(INV.materialName(m))}${m.active === false ? '（停用）' : ''}</div>
+            <div class="text-xs text-slate-500">${[m.note, `每包 ${INV.fmtKg(m.bagKg || 25)} kg`, Number(m.safetyKg) > 0 ? `安全量 ${INV.fmtKg(m.safetyKg)} kg` : '未設安全量', `${usage[m.id] || 0} 筆紀錄`].filter(Boolean).map(esc).join('・')}</div></div>
+            <button onclick="openMaterialForm('${m.id}')" class="text-sm text-blue-600 shrink-0">編輯</button>
+        </div>`).join('') : '<div class="text-center text-slate-500 text-sm py-6">尚無原料</div>';
+
+    const sups = [...inv.suppliers].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-Hant'));
+    $('supplier-admin-list').innerHTML = sups.length ? sups.map(s => `
+        <div class="px-4 py-3 flex items-center justify-between gap-2 ${s.active === false ? 'opacity-50' : ''}">
+            <div class="min-w-0"><div class="font-medium text-slate-800">${esc(s.name)}${s.active === false ? '（停用）' : ''}</div>
+            <div class="text-xs text-slate-500">${[s.contact, s.phone, s.note].filter(Boolean).map(esc).join('・')}</div></div>
+            <button onclick="openSupplierForm('${s.id}')" class="text-sm text-blue-600 shrink-0">編輯</button>
+        </div>`).join('') : '<div class="text-center text-slate-500 text-sm py-6">尚無供應商</div>';
+}
+
+function openMaterialForm(id) {
+    const m = id ? findMaterial(id) : { base: 'PP', color: '', flow: '高', note: '', bagKg: 25, safetyKg: '', active: true };
+    const used = id ? inv.moves.some(mv => mv.materialId === id) : false;
+    const bases = [...new Set(inv.materials.map(x => x.base).filter(Boolean))];
+    openModal(`
+        <div class="flex items-center justify-between mb-4"><h3 class="font-bold text-lg">${id ? '編輯原料' : '新增原料'}</h3><button onclick="closeModal()" class="text-slate-400 text-xl">&times;</button></div>
+        <div class="space-y-3">
+            <div class="grid grid-cols-2 gap-2">
+                <div>${lbl('基材')}<input id="m-base" list="m-base-list" value="${esc(m.base)}" class="${inputCls}"><datalist id="m-base-list">${bases.map(b => `<option value="${esc(b)}">`).join('')}</datalist></div>
+                <div>${lbl('顏色')}<input id="m-color" value="${esc(m.color)}" placeholder="例如：磚紅" class="${inputCls}"></div>
+            </div>
+            <div>${lbl('流動性')}<select id="m-flow" class="${inputCls}"><option value="高">高流動</option><option value="低">低流動</option></select></div>
+            <div>${lbl('備註（MI 值、牌號）')}<input id="m-note" value="${esc(m.note)}" placeholder="例如：MI 20" class="${inputCls}"></div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>${lbl('每包 kg')}<input type="number" inputmode="decimal" step="any" id="m-bagkg" value="${esc(m.bagKg ?? 25)}" class="${inputCls}"></div>
+                <div>${lbl('安全庫存 kg')}<input type="number" inputmode="decimal" step="any" id="m-safety" value="${esc(m.safetyKg ?? '')}" placeholder="低於就提醒叫貨" class="${inputCls}"></div>
+            </div>
+            ${id ? `<label class="flex items-center gap-2 text-sm"><input type="checkbox" id="m-active" ${m.active !== false ? 'checked' : ''} class="w-4 h-4"> 使用中（取消勾選＝停用，不會出現在選單）</label>` : ''}
+            <button onclick="submitMaterial('${id || ''}')" class="w-full bg-blue-600 text-white font-medium py-3 rounded-xl">儲存</button>
+            ${id && !used ? `<button onclick="deleteMaterial('${id}')" class="w-full text-red-600 text-sm py-2">刪除這個原料</button>` : ''}
+            ${id && used ? `<p class="text-xs text-slate-400 text-center">已有進出紀錄，不能刪除；不再使用請改成停用。</p>` : ''}
+        </div>`);
+    $('m-flow').value = m.flow || '高';
+}
+function submitMaterial(id) {
+    const base = $('m-base').value.trim(), color = $('m-color').value.trim(), flow = $('m-flow').value;
+    if (!base || !color) { toast('請填基材與顏色'); return; }
+    const dup = inv.materials.find(x => x.id !== id && x.base === base && x.color === color && x.flow === flow);
+    if (dup) { toast('已經有同樣的品項了'); return; }
+    const bagKg = Number($('m-bagkg').value);
+    if (!(bagKg > 0)) { toast('每包 kg 要大於 0'); return; }
+    const safety = $('m-safety').value === '' ? null : Number($('m-safety').value);
+    api.saveMaterial({
+        id: id || api.newId('materials'), base, color, flow, note: $('m-note').value.trim(), bagKg,
+        safetyKg: safety, active: id ? $('m-active').checked : true
+    });
+    closeModal(); toast('已儲存');
+}
+function deleteMaterial(id) {
+    if (inv.moves.some(mv => mv.materialId === id)) { toast('已有紀錄，不能刪除'); return; }
+    api.deleteMaterial(id); closeModal(); toast('已刪除');
+}
+
+// ---------- 設定：供應商 ----------
+function openSupplierForm(id) {
+    const s = id ? inv.suppliers.find(x => x.id === id) : { name: '', contact: '', phone: '', note: '', active: true };
+    const used = id ? inv.moves.some(mv => mv.supplierId === id) : false;
+    openModal(`
+        <div class="flex items-center justify-between mb-4"><h3 class="font-bold text-lg">${id ? '編輯供應商' : '新增供應商'}</h3><button onclick="closeModal()" class="text-slate-400 text-xl">&times;</button></div>
+        <div class="space-y-3">
+            <div>${lbl('名稱')}<input id="s-name" value="${esc(s.name)}" class="${inputCls}"></div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>${lbl('聯絡人')}<input id="s-contact" value="${esc(s.contact)}" class="${inputCls}"></div>
+                <div>${lbl('電話')}<input id="s-phone" type="tel" value="${esc(s.phone)}" class="${inputCls}"></div>
+            </div>
+            <div>${lbl('備註')}<input id="s-note" value="${esc(s.note)}" class="${inputCls}"></div>
+            ${id ? `<label class="flex items-center gap-2 text-sm"><input type="checkbox" id="s-active" ${s.active !== false ? 'checked' : ''} class="w-4 h-4"> 使用中</label>` : ''}
+            <button onclick="submitSupplier('${id || ''}')" class="w-full bg-blue-600 text-white font-medium py-3 rounded-xl">儲存</button>
+            ${id && !used ? `<button onclick="api.deleteSupplier('${id}');closeModal();toast('已刪除')" class="w-full text-red-600 text-sm py-2">刪除這個供應商</button>` : ''}
+        </div>`);
+}
+function submitSupplier(id) {
+    const name = $('s-name').value.trim();
+    if (!name) { toast('請填名稱'); return; }
+    api.saveSupplier({
+        id: id || api.newId('suppliers'), name, contact: $('s-contact').value.trim(), phone: $('s-phone').value.trim(),
+        note: $('s-note').value.trim(), active: id ? $('s-active').checked : true
+    });
+    closeModal(); toast('已儲存');
+}
+
+switchTab('stock');
+</script>
+</body>
+</html>
