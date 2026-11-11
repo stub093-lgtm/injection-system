@@ -237,10 +237,16 @@
                     </h2>
                     <p class="text-sm text-slate-500 mt-0.5">管理所有塑膠射出件的規格、穴數、重量與標準成型週期時間（Cycle Time）。</p>
                 </div>
-                <button onclick="openProductModal()" class="need-editor bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center justify-center space-x-2 shrink-0">
-                    <i class="fa-solid fa-plus"></i>
-                    <span>新增產品資料</span>
-                </button>
+                <div class="flex gap-2 shrink-0">
+                    <button onclick="openBulkModal()" class="need-editor bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center justify-center gap-2 flex-1 sm:flex-none">
+                        <i class="fa-solid fa-paste"></i>
+                        <span>批次貼上</span>
+                    </button>
+                    <button onclick="openProductModal()" class="need-editor bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center justify-center gap-2 flex-1 sm:flex-none">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>新增產品資料</span>
+                    </button>
+                </div>
             </div>
 
             <!-- 產品表格清單 -->
@@ -857,6 +863,36 @@
         </div>
     </div>
 
+    <!-- 批次貼上產品 Modal -->
+    <div id="bulk-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-start sm:items-center justify-center p-3 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-3xl w-full p-5 shadow-xl border border-slate-200 space-y-3 my-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-paste text-blue-600 mr-1.5"></i>批次貼上產品</h3>
+                <button onclick="closeBulkModal()" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3 leading-relaxed">
+                一行一個產品，欄位順序：<b>料號、品名、材料、穴數、單件重(g)、料頭重(g)、週期(秒)</b><br>
+                從 Excel／Google 試算表整塊複製貼上最穩；也可以用逗號分隔。第一行是標題會自動略過。<br>
+                料號已存在的會<b class="text-amber-700">更新</b>規格（成型條件不動），新的料號會<b class="text-emerald-700">新增</b>。
+            </div>
+            <textarea id="bulk-text" rows="7" oninput="previewBulk()" placeholder="A01	14.7cm 蓋	PP 磚紅 高流動	4	12.5	3.2	18" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono outline-none"></textarea>
+            <div id="bulk-summary" class="text-sm font-semibold text-slate-700"></div>
+            <div class="overflow-x-auto max-h-72 overflow-y-auto border border-slate-200 rounded-xl">
+                <table class="w-full text-xs text-left">
+                    <thead class="bg-slate-100 text-slate-600 sticky top-0"><tr>
+                        <th class="px-2 py-1.5">行</th><th class="px-2 py-1.5">狀態</th><th class="px-2 py-1.5">料號</th><th class="px-2 py-1.5">品名</th><th class="px-2 py-1.5">材料</th>
+                        <th class="px-2 py-1.5 text-right">穴</th><th class="px-2 py-1.5 text-right">單件</th><th class="px-2 py-1.5 text-right">料頭</th><th class="px-2 py-1.5 text-right">週期</th>
+                    </tr></thead>
+                    <tbody id="bulk-preview" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+            <div class="flex justify-end gap-2 pt-1">
+                <button onclick="closeBulkModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">取消</button>
+                <button id="bulk-save-btn" onclick="saveBulk()" disabled class="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white px-5 py-2 rounded-xl font-bold text-sm">匯入</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 產品 Modal -->
     <div id="product-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 space-y-5">
@@ -1151,6 +1187,20 @@
 
             // 產品
             saveProduct(p) { bg(fs.setDoc(fs.doc(db, 'products', p.id), { ...stripId(p), ...stamp() })); },
+            // 批次寫入產品；新產品同時建一份預設 SOP。每批最多 400 筆操作
+            saveProductsBatch(products, newSopIds) {
+                const ops = products.map(p => b => b.set(fs.doc(db, 'products', p.id), { ...stripId(p), ...stamp() }));
+                newSopIds.forEach(id => ops.push(b => {
+                    const data = { ...DEFAULT_SOP, ...stamp() };
+                    b.set(fs.doc(db, 'sops', id), data);
+                    b.set(fs.doc(fs.collection(db, 'sops', id, 'history')), data);
+                }));
+                for (let i = 0; i < ops.length; i += 130) {   // 每個 op 最多 3 筆寫入
+                    const batch = fs.writeBatch(db);
+                    ops.slice(i, i + 130).forEach(fn => fn(batch));
+                    bg(batch.commit());
+                }
+            },
             deleteProduct(id) {
                 const batch = fs.writeBatch(db);
                 batch.delete(fs.doc(db, 'products', id));
@@ -1595,6 +1645,95 @@
             if (!confirm(`確定刪除「${p?.name}」？\n其成型條件 SOP 會一併刪除${logCount ? `；${logCount} 筆歷史紀錄會保留並標示為已刪除產品` : ''}。`)) return;
             window.api.deleteProduct(productId);
             showToast('產品資料已刪除');
+        }
+
+        // ==================== 批次貼上產品 ====================
+        let bulkRows = [];
+        function openBulkModal() {
+            document.getElementById('bulk-text').value = '';
+            previewBulk();
+            document.getElementById('bulk-modal').classList.remove('hidden');
+            document.getElementById('bulk-text').focus();
+        }
+        function closeBulkModal() {
+            const t = document.getElementById('bulk-text').value.trim();
+            if (t && !confirm('貼上的內容還沒匯入，確定關閉？')) return;
+            document.getElementById('bulk-modal').classList.add('hidden');
+        }
+        // 拆欄位：有 Tab 用 Tab（試算表複製）；有逗號用逗號；否則用空白，
+        // 空白分隔時：第一個是料號、最後四個是數字、倒數第五個是材料、中間是品名
+        function splitBulkLine(line) {
+            if (line.includes('\t')) return line.split('\t').map(x => x.trim());
+            if (/[,，]/.test(line)) return line.split(/[,，]/).map(x => x.trim());
+            const t = line.trim().split(/\s+/);
+            if (t.length <= 7) return t;
+            return [t[0], t.slice(1, t.length - 5).join(' '), t[t.length - 5], ...t.slice(-4)];
+        }
+        function parseBulk(text, existing) {
+            const num = v => { const n = parseFloat(String(v ?? '').replace(/[^\d.\-]/g, '')); return Number.isFinite(n) ? n : NaN; };
+            const byCode = new Map(existing.map(p => [p.code, p]));
+            const seen = new Map();
+            const rows = [];
+            text.split(/\r?\n/).forEach((line, i) => {
+                if (!line.trim()) return;
+                const c = splitBulkLine(line);
+                if (rows.length === 0 && seen.size === 0 && !Number.isFinite(num(c[3])) && /料號|品名|穴/.test(line)) return;  // 標題列
+                const r = { line: i + 1, code: c[0] || '', name: c[1] || '', material: c[2] || '',
+                    cavities: num(c[3]), partWeight: num(c[4]), runnerWeight: c[5] === '' || c[5] == null ? 0 : num(c[5]), cycleTime: num(c[6]), errors: [] };
+                if (c.length < 7) r.errors.push(`欄位只有 ${c.length} 個（要 7 個）`);
+                if (!r.code) r.errors.push('沒有料號');
+                if (!r.name) r.errors.push('沒有品名');
+                if (!(Number.isInteger(r.cavities) && r.cavities >= 1)) r.errors.push('穴數要是 ≥1 的整數');
+                if (!(r.partWeight > 0)) r.errors.push('單件重要 > 0');
+                if (!(r.runnerWeight >= 0)) r.errors.push('料頭重不是數字');
+                if (!(r.cycleTime > 0)) r.errors.push('週期要 > 0');
+                if (r.code && seen.has(r.code)) r.errors.push(`料號跟第 ${seen.get(r.code)} 行重複`);
+                if (r.code && !seen.has(r.code)) seen.set(r.code, r.line);
+                const old = byCode.get(r.code);
+                r.existingId = old?.id || null;
+                r.changes = old ? ['name', 'material', 'cavities', 'partWeight', 'runnerWeight', 'cycleTime'].filter(k => String(old[k] ?? '') !== String(r[k])) : [];
+                rows.push(r);
+            });
+            return rows;
+        }
+        function previewBulk() {
+            bulkRows = parseBulk(document.getElementById('bulk-text').value, window.appData.products);
+            const bad = bulkRows.filter(r => r.errors.length).length;
+            const add = bulkRows.filter(r => !r.errors.length && !r.existingId).length;
+            const upd = bulkRows.filter(r => !r.errors.length && r.existingId && r.changes.length).length;
+            const same = bulkRows.filter(r => !r.errors.length && r.existingId && !r.changes.length).length;
+            document.getElementById('bulk-summary').innerHTML = bulkRows.length
+                ? `新增 <span class="text-emerald-700">${add}</span>｜更新 <span class="text-amber-700">${upd}</span>｜沒變 ${same}｜<span class="${bad ? 'text-rose-600' : ''}">有錯 ${bad}</span>${bad ? '（有錯的行要先修好才能匯入）' : ''}`
+                : '<span class="text-slate-400 font-normal">貼上後這裡會顯示預覽</span>';
+            const cell = (r, k, v, right) => `<td class="px-2 py-1 ${right ? 'text-right' : ''} ${r.changes.includes(k) ? 'bg-amber-100 font-bold' : ''}">${esc(Number.isNaN(v) ? '?' : v)}</td>`;
+            document.getElementById('bulk-preview').innerHTML = bulkRows.map(r => {
+                const st = r.errors.length ? `<span class="text-rose-600 font-bold">✗ ${esc(r.errors.join('、'))}</span>`
+                    : r.existingId ? (r.changes.length ? '<span class="text-amber-700 font-bold">更新</span>' : '<span class="text-slate-400">沒變</span>')
+                    : '<span class="text-emerald-700 font-bold">新增</span>';
+                return `<tr class="${r.errors.length ? 'bg-rose-50' : ''}"><td class="px-2 py-1 text-slate-400">${r.line}</td><td class="px-2 py-1">${st}</td>
+                    <td class="px-2 py-1 font-mono">${esc(r.code)}</td>${cell(r, 'name', r.name)}${cell(r, 'material', r.material)}
+                    ${cell(r, 'cavities', r.cavities, 1)}${cell(r, 'partWeight', r.partWeight, 1)}${cell(r, 'runnerWeight', r.runnerWeight, 1)}${cell(r, 'cycleTime', r.cycleTime, 1)}</tr>`;
+            }).join('');
+            document.getElementById('bulk-save-btn').disabled = !(add + upd) || bad > 0;
+        }
+        function saveBulk() {
+            previewBulk();
+            if (bulkRows.some(r => r.errors.length)) return;
+            const todo = bulkRows.filter(r => !r.existingId || r.changes.length);
+            if (!todo.length) return;
+            const base = Date.now();
+            const products = [], newIds = [];
+            todo.forEach((r, i) => {
+                const id = r.existingId || `p_${base}_${i}`;
+                if (!r.existingId && !window.appData.sops[id]) newIds.push(id);
+                products.push({ id, code: r.code, name: r.name, material: r.material, cavities: r.cavities,
+                    partWeight: r.partWeight, runnerWeight: r.runnerWeight, cycleTime: r.cycleTime });
+            });
+            if (!confirm(`確定匯入？新增 ${newIds.length} 個、更新 ${products.length - newIds.length} 個產品。`)) return;
+            window.api.saveProductsBatch(products, newIds);
+            document.getElementById('bulk-text').value = '';
+            document.getElementById('bulk-modal').classList.add('hidden');
+            showToast(`已匯入 ${products.length} 個產品`);
         }
 
         function viewProductSop(productId) {
