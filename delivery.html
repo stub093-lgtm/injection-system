@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>出車紀錄</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="出車紀錄">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #f1f5f9; }
+        .hidden { display: none; }
+        body:not([data-role="admin"]):not([data-role="editor"]) .need-editor { display: none !important; }
+        input, select, textarea { font-size: 16px; }
+        .chip.on { background: #0f172a; color: #fff; border-color: #0f172a; }
+    </style>
+</head>
+<body class="min-h-screen pb-24">
+
+<!-- ===================== 登入 ===================== -->
+<div id="auth-screen" class="fixed inset-0 z-[60] bg-slate-100 flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div class="text-center mb-5">
+            <div class="w-12 h-12 mx-auto rounded-xl bg-slate-900 text-white flex items-center justify-center text-xl"><i class="fa-solid fa-truck"></i></div>
+            <h1 class="mt-3 text-lg font-bold text-slate-800">出車紀錄</h1>
+            <p class="text-xs text-slate-500 mt-1">使用射出成型管理系統（MES）的帳號登入</p>
+        </div>
+        <div id="auth-loading" class="text-center text-sm text-slate-500 py-6"><i class="fa-solid fa-spinner fa-spin mr-2"></i>載入中…</div>
+        <form id="auth-login" class="hidden space-y-3" onsubmit="authSubmit(event)">
+            <div><label class="text-xs font-medium text-slate-600">Email</label>
+                <input type="email" id="auth-email" required autocomplete="username" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"></div>
+            <div><label class="text-xs font-medium text-slate-600">密碼</label>
+                <input type="password" id="auth-password" required minlength="6" autocomplete="current-password" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"></div>
+            <button type="submit" class="w-full bg-blue-600 text-white font-medium py-2.5 rounded-xl text-sm">登入</button>
+            <p id="auth-pending-note" class="hidden text-xs text-amber-600 text-center">登入後會自動存入捷徑送來的紀錄</p>
+        </form>
+        <div id="auth-blocked" class="hidden text-sm text-slate-700 space-y-3">
+            <p id="auth-blocked-text"></p>
+            <a href="index.html" class="block text-center w-full bg-blue-600 text-white font-medium py-2.5 rounded-xl">前往 MES</a>
+            <button onclick="api.logout()" class="w-full text-slate-500 text-xs underline">登出</button>
+        </div>
+        <div id="auth-offline" class="hidden text-sm text-slate-700 text-center"><i class="fa-solid fa-wifi text-amber-500 mr-1"></i>無法連線雲端，請確認網路後重新整理。</div>
+    </div>
+</div>
+
+<!-- ===================== 頂部 ===================== -->
+<header class="bg-slate-900 text-white sticky top-0 z-30">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <i class="fa-solid fa-truck text-amber-400"></i><span class="font-bold">出車紀錄</span>
+            <span id="sync-badge" class="text-[11px] text-slate-400 ml-1"></span>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+            <a href="index.html" class="text-slate-300"><i class="fa-solid fa-industry mr-1"></i>MES</a>
+            <button onclick="api.logout()" class="text-slate-300"><i class="fa-solid fa-right-from-bracket"></i></button>
+        </div>
+    </div>
+    <nav class="max-w-3xl mx-auto px-2 flex text-sm">
+        <button data-tab="log" onclick="switchTab('log')" class="tab-btn flex-1 py-2.5 border-b-2">紀錄</button>
+        <button data-tab="report" onclick="switchTab('report')" class="tab-btn flex-1 py-2.5 border-b-2">報表</button>
+        <button data-tab="settings" onclick="switchTab('settings')" class="tab-btn flex-1 py-2.5 border-b-2">設定</button>
+    </nav>
+</header>
+
+<main class="max-w-3xl mx-auto px-4 py-4">
+    <div id="saved-banner" class="hidden mb-3 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-xl px-4 py-3"></div>
+
+    <!-- ===== 紀錄 ===== -->
+    <section id="tab-log">
+        <div class="grid grid-cols-3 gap-2 mb-4">
+            <button onclick="openDayForm()" class="bg-blue-600 text-white rounded-xl py-3 font-medium"><i class="fa-solid fa-truck mr-1"></i>出車</button>
+            <button onclick="openFuelForm()" class="bg-amber-500 text-white rounded-xl py-3 font-medium"><i class="fa-solid fa-gas-pump mr-1"></i>加油</button>
+            <button onclick="openServiceForm()" class="bg-slate-700 text-white rounded-xl py-3 font-medium"><i class="fa-solid fa-wrench mr-1"></i>保養</button>
+        </div>
+        <div id="due-banner" class="hidden mb-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm"></div>
+        <div class="flex gap-2 mb-2 items-center">
+            <input type="month" id="log-month" onchange="renderLog()" class="bg-white border border-slate-300 rounded-xl px-2 py-2">
+            <input id="log-search" oninput="renderLog()" placeholder="搜尋客戶" class="flex-1 min-w-0 bg-white border border-slate-300 rounded-xl px-3 py-2">
+        </div>
+        <div id="log-summary" class="text-sm text-slate-600 mb-2"></div>
+        <div id="log-list" class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100"></div>
+        <p class="text-xs text-slate-400 mt-2">里程是出發前抄的：當天公里數＝下一次出車的里程 − 當天里程，所以最新一天要等下次出車才會有數字。</p>
+    </section>
+
+    <!-- ===== 報表 ===== -->
+    <section id="tab-report" class="hidden space-y-4">
+        <div class="flex gap-2 items-center">
+            <input type="month" id="rp-month" onchange="renderReport()" class="bg-white border border-slate-300 rounded-xl px-2 py-2">
+        </div>
+        <div id="rp-cards" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+            <h3 class="font-bold text-slate-800 mb-2 text-sm">每月里程</h3>
+            <div id="rp-months" class="space-y-1.5"></div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="font-bold text-slate-800 text-sm">客戶出貨次數</h3>
+                <select id="rp-range" onchange="renderReport()" class="text-sm bg-slate-50 border border-slate-300 rounded-lg px-2 py-1">
+                    <option value="month">這個月</option><option value="3">近 3 個月</option><option value="all">全部</option>
+                </select>
+            </div>
+            <div id="rp-clients" class="divide-y divide-slate-100 text-sm"></div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+            <h3 class="font-bold text-slate-800 mb-2 text-sm">保養狀況</h3>
+            <div id="rp-service" class="text-sm space-y-1"></div>
+        </div>
+    </section>
+
+    <!-- ===== 設定 ===== -->
+    <section id="tab-settings" class="hidden space-y-5">
+        <div class="bg-white rounded-xl border border-slate-200 p-4 need-editor">
+            <h3 class="font-bold text-slate-800 mb-1">匯入舊紀錄</h3>
+            <p class="text-xs text-slate-500 mb-2">從備忘錄整段複製貼上，一行一天，例如「11/11 佳杬 慶隆 526548 尿素」。括號內容當備註；尿素、大保養會另外記成保養。同一天重複匯入會合併，不會重複。</p>
+            <div class="flex gap-2 mb-2 items-center text-sm">
+                <span class="text-slate-600">第一行的年份</span>
+                <input type="number" id="imp-year" class="w-24 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1">
+            </div>
+            <textarea id="imp-text" rows="6" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2" placeholder="6/30 六福 林政憲 510673&#10;7/1 台北翠荺 510860"></textarea>
+            <button onclick="previewImport()" class="mt-2 bg-slate-900 text-white text-sm px-4 py-2 rounded-lg">預覽</button>
+            <div id="imp-preview" class="mt-3"></div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+            <h3 class="font-bold text-slate-800 mb-1">客戶名稱合併</h3>
+            <p class="text-xs text-slate-500 mb-2">同一個客戶寫法不同時，一行一個「舊寫法=統一名稱」。只影響報表統計，不改原始紀錄。</p>
+            <textarea id="alias-text" rows="5" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono text-sm"></textarea>
+            <button onclick="saveAliases()" class="mt-2 bg-slate-900 text-white text-sm px-4 py-2 rounded-lg">儲存</button>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+            <h3 class="font-bold text-slate-800 mb-1">保養間隔</h3>
+            <p class="text-xs text-slate-500 mb-2">照保養手冊或保養廠建議填公里數，快到時首頁會標紅。空白代表不提醒。</p>
+            <div id="interval-list" class="space-y-2"></div>
+            <button onclick="saveIntervals()" class="mt-2 bg-slate-900 text-white text-sm px-4 py-2 rounded-lg">儲存</button>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+            <h3 class="font-bold text-slate-800 mb-1">iPhone 捷徑用的網址</h3>
+            <p class="text-xs text-slate-500 mb-2">捷徑把問到的答案接在網址後面打開，這頁就會自動存檔。中文要先經過「URL 編碼」。</p>
+            <div id="shortcut-urls" class="space-y-2 text-xs"></div>
+        </div>
+    </section>
+</main>
+
+<div id="modal" class="hidden fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onclick="if(event.target===this)closeModal()">
+    <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl max-h-[92vh] overflow-y-auto p-5" id="modal-body"></div>
+</div>
+<div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2.5 rounded-xl text-sm opacity-0 pointer-events-none transition-opacity duration-300 z-[70]"></div>
+
+<!-- ===================== 純計算（無 DOM，可單獨測試） ===================== -->
+<script id="truck-core">
+const TRUCK = (() => {
+    const pad = n => String(n).padStart(2, '0');
+    // PDF/備忘錄常見的部首字、全形符號 → 一般字
+    const FIX = { '⺠': '民', '｡': ' ', '。': ' ', '，': ' ', ',': ' ', '、': ' ', '　': ' ' };
+    const SERVICE_WORDS = ['大保養', '小保養', '保養', '尿素', '換機油', '換輪胎', '驗車'];
+    const NOTE_PREFIX = ['載', '檢查', '修', '送修', '拿'];
+
+    function clean(s) {
+        s = String(s || '').normalize('NFKC');
+        s = s.replace(/[⺠｡。，,、　]/g, c => FIX[c]);
+        s = s.replace(/\^([^\s^]*?)a(?=\s|$)/g, '($1)'); // PDF 把括號轉成 ^…a
+        return s.replace(/（/g, '(').replace(/）/g, ')');
+    }
+
+    function splitNames(s) { return clean(s).split(/\s+/).map(x => x.trim()).filter(Boolean); }
+
+    function classify(tokens) {
+        const clients = [], notes = [], services = [];
+        tokens.forEach(t => {
+            if (SERVICE_WORDS.includes(t)) services.push(t);
+            else if (NOTE_PREFIX.some(p => t.startsWith(p)) && t.length <= 6) notes.push(t);
+            else clients.push(t);
+        });
+        return { clients, notes, services };
+    }
+
+    // 一行：「11/11 佳杬 慶隆 526548 尿素」
+    function parseLine(line, year) {
+        let s = clean(line).trim();
+        const m = s.match(/^(\d{1,2})\s*\/\s*(\d{1,2})\s*(.*)$/);
+        if (!m) return null;
+        const month = +m[1], day = +m[2];
+        let rest = m[3];
+        const warn = [];
+        if (month < 1 || month > 12 || day < 1 || day > 31) warn.push('日期不合理');
+        const paren = [];
+        rest = rest.replace(/\(([^)]*)\)/g, (_, x) => { if (x.trim()) paren.push(x.trim()); return ' '; });
+        const nums = [];
+        rest = rest.replace(/\d{5,7}/g, x => { nums.push(+x); return ' '; });
+        if (nums.length > 1) warn.push('一行有多個里程數，取最後一個');
+        const c = classify(splitNames(rest));
+        // 括號內：保養字眼算保養，其餘算備註（例如聯絡人、載料）
+        paren.forEach(p => { if (SERVICE_WORDS.includes(p)) c.services.push(p); else c.notes.push(p); });
+        if (!nums.length) warn.push('沒有里程數');
+        if (!c.clients.length && !c.notes.length) warn.push('沒有客戶');
+        return { month, day, year, odo: nums.length ? nums[nums.length - 1] : null, ...c, raw: line.trim(), warn };
+    }
+
+    // 整段文字，跨年時月份變小就 +1 年
+    // 別名裡有空白的（例如「嘉義 翠荺」）先在整行文字層級合併
+    function applyPhrases(text, map) {
+        Object.keys(map || {}).filter(k => /\s/.test(k)).forEach(k => {
+            const re = new RegExp(k.trim().split(/\s+/).map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+'), 'g');
+            text = text.replace(re, map[k]);
+        });
+        return text;
+    }
+
+    function parseText(text, startYear, aliasMap) {
+        const out = [];
+        text = applyPhrases(clean(text), aliasMap);
+        let year = startYear, lastMonth = 0;
+        String(text || '').split(/\r?\n/).forEach(line => {
+            if (!line.trim()) return;
+            const r = parseLine(line, year);
+            if (!r) { out.push({ raw: line.trim(), invalid: true, warn: ['看不懂這行'] }); return; }
+            if (lastMonth && r.month < lastMonth - 6) { year++; r.year = year; }
+            lastMonth = r.month;
+            r.date = `${r.year}-${pad(r.month)}-${pad(r.day)}`;
+            out.push(r);
+        });
+        // 里程倒退或暴增
+        let prev = null;
+        out.filter(r => !r.invalid && r.odo).forEach(r => {
+            if (prev) {
+                const d = r.odo - prev.odo;
+                if (d < 0) r.warn.push(`里程比前一筆（${prev.date.slice(5)}）少`);
+                else if (d > 500) prev.warn.push(`這天跑了 ${d} km，請確認里程`);
+            }
+            prev = r;
+        });
+        const seen = {};
+        out.filter(r => !r.invalid).forEach(r => { if (seen[r.date]) r.warn.push('同一天重複，匯入時會合併'); seen[r.date] = 1; });
+        return out;
+    }
+
+    function alias(name, map) { return (map && map[name]) || name; }
+
+    // 里程是出發前抄的：當天里程 = 下一筆里程 − 當天里程
+    function dayKm(days) {
+        const list = [...days].sort((a, b) => a.date.localeCompare(b.date));
+        const res = {};
+        for (let i = 0; i < list.length; i++) {
+            const d = list[i];
+            if (!d.odo) { res[d.date] = { km: null, mergedInto: null }; continue; }
+            let j = i + 1; const skipped = [];
+            while (j < list.length && !list[j].odo) { skipped.push(list[j].date); j++; }
+            const next = list[j];
+            res[d.date] = { km: next ? next.odo - d.odo : null, merged: skipped, pending: !next };
+            skipped.forEach(s => { res[s] = { km: null, mergedInto: d.date }; });
+        }
+        return res;
+    }
+
+    // 跳停＝每次加滿：這次公升數 ÷（這次里程 − 上次加油里程）
+    function fuelStats(fuels) {
+        const list = fuels.filter(f => f.odo).sort((a, b) => a.odo - b.odo);
+        return list.map((f, i) => {
+            const prev = list[i - 1];
+            const dist = prev ? f.odo - prev.odo : null;
+            return { ...f, dist, kmPerL: prev && f.liters ? dist / f.liters : null, perKm: prev && f.amount ? f.amount / dist : null };
+        });
+    }
+
+    function monthReport(month, days, fuels, aliasMap) {
+        const km = dayKm(days);
+        const md = days.filter(d => d.date.startsWith(month));
+        const totalKm = md.reduce((a, d) => a + (km[d.date]?.km || 0), 0);
+        const pending = md.filter(d => km[d.date]?.pending).map(d => d.date);
+        const fs = fuelStats(fuels).filter(f => (f.date || '').startsWith(month));
+        const liters = fs.reduce((a, f) => a + (+f.liters || 0), 0);
+        const amount = fs.reduce((a, f) => a + (+f.amount || 0), 0);
+        const eff = fs.filter(f => f.kmPerL);
+        const effDist = eff.reduce((a, f) => a + f.dist, 0), effL = eff.reduce((a, f) => a + +f.liters, 0);
+        return {
+            month, trips: md.length, totalKm, pending, liters, amount, fuelCount: fs.length,
+            kmPerL: effL ? effDist / effL : null,
+            clients: clientRank(md, aliasMap)
+        };
+    }
+
+    function clientRank(days, aliasMap) {
+        const c = {};
+        days.forEach(d => [...new Set((d.clients || []).map(x => alias(x, aliasMap)))].forEach(n => {
+            c[n] = c[n] || { name: n, count: 0, last: '' };
+            c[n].count++; if (d.date > c[n].last) c[n].last = d.date;
+        }));
+        return Object.values(c).sort((a, b) => b.count - a.count || b.last.localeCompare(a.last));
+    }
+
+    // 合併同一天：客戶聯集、里程取較小（出發前）
+    function mergeDay(old, add) {
+        if (!old) return add;
+        const u = (a, b) => [...new Set([...(a || []), ...(b || [])])];
+        const odos = [old.odo, add.odo].filter(Boolean);
+        return { ...old, ...add, odo: odos.length ? Math.min(...odos) : null, clients: u(old.clients, add.clients), notes: u(old.notes, add.notes) };
+    }
+
+    function splitInput(s) { return splitNames(s); }
+
+    const DEFAULT_ALIASES = { '翠荺嘉義': '嘉義翠荺', '嘉義 翠荺': '嘉義翠荺' };
+    return { DEFAULT_ALIASES, applyPhrases, clean, parseLine, parseText, dayKm, fuelStats, monthReport, clientRank, mergeDay, splitInput, alias, classify, SERVICE_WORDS };
+})();
+if (typeof module !== 'undefined') module.exports = TRUCK;
+
+</script>
+
+<!-- ===================== 雲端層 ===================== -->
+<script type="module">
+const FB_VER = '9.22.1';
+// 與 MES（index.html）相同的 Firebase 專案；同一個網站，登入狀態共用
+const firebaseConfig = {
+    apiKey: "AIzaSyDqFzF8L3N1-gxmycxJc8Y4FFQKXiNN2ds",
+    authDomain: "sunghsing.firebaseapp.com",
+    databaseURL: "https://sunghsing-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "sunghsing",
+    storageBucket: "sunghsing.firebasestorage.app",
+    messagingSenderId: "12105900713",
+    appId: "1:12105900713:web:c747d7d6a82f754b90ffb8",
+    measurementId: "G-CQNZHLEVHD"
+};
+// 全部放同一個 collection，Firestore 規則只要加一條
+const COL = 'truckLogs';
+
+window.tk = { days: [], fuels: [], services: [], meta: {}, loaded: false };
+window.currentUser = null;
+let fa, fs, auth, db, unsub = null, memberUnsub = null;
+const $ = (id) => document.getElementById(id);
+const emailKey = (e) => String(e || '').trim().toLowerCase();
+
+function showScreen(name, text) {
+    ['auth-loading', 'auth-login', 'auth-blocked', 'auth-offline'].forEach(id => $(id).classList.add('hidden'));
+    if (name === 'app') { $('auth-screen').classList.add('hidden'); return; }
+    $('auth-screen').classList.remove('hidden');
+    $('auth-' + name).classList.remove('hidden');
+    if (text) $('auth-blocked-text').textContent = text;
+}
+function errMsg(e) {
+    const code = e?.code || '';
+    if (code === 'permission-denied') return '權限不足：Firestore 規則還沒開放 truckLogs（請看設定說明）';
+    return `操作失敗（${code || e?.message || '未知錯誤'}）`;
+}
+function bg(p) { return p.catch(e => { console.warn(e); window.toast(errMsg(e)); throw e; }); }
+
+function startListener() {
+    if (unsub) unsub();
+    unsub = fs.onSnapshot(fs.collection(db, COL), { includeMetadataChanges: true }, snap => {
+        const all = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+        tk.days = all.filter(x => x.kind === 'day').sort((a, b) => b.date.localeCompare(a.date));
+        tk.fuels = all.filter(x => x.kind === 'fuel');
+        tk.services = all.filter(x => x.kind === 'service');
+        tk.meta = all.find(x => x.id === 'meta') || {};
+        const el = $('sync-badge');
+        if (snap.metadata.hasPendingWrites) { el.textContent = '● 同步中…'; el.className = 'text-[11px] ml-1 text-sky-400'; }
+        else if (snap.metadata.fromCache) { el.textContent = '● 離線（連線後自動上傳）'; el.className = 'text-[11px] ml-1 text-amber-400'; }
+        else { el.textContent = '● 已同步'; el.className = 'text-[11px] ml-1 text-emerald-400'; }
+        const first = !tk.loaded; tk.loaded = true;
+        window.renderAll && window.renderAll();
+        if (first && window.onFirstLoad) window.onFirstLoad();
+    }, err => { console.warn(err); window.toast(errMsg(err)); });
+}
+
+const stamp = () => ({ updatedAt: new Date().toISOString(), updatedBy: window.currentUser?.email || '' });
+const strip = ({ id, ...rest }) => rest;
+
+window.api = {
+    async signIn(email, pw) { await fa.signInWithEmailAndPassword(auth, email.trim(), pw); },
+    async logout() { await fa.signOut(auth); },
+    newId() { return fs.doc(fs.collection(db, COL)).id; },
+    save(doc) { return bg(fs.setDoc(fs.doc(db, COL, doc.id), { ...strip(doc), ...stamp() })); },
+    remove(id) { return bg(fs.deleteDoc(fs.doc(db, COL, id))); },
+    async saveMany(docs) {
+        for (let i = 0; i < docs.length; i += 400) {
+            const b = fs.writeBatch(db);
+            docs.slice(i, i + 400).forEach(d => b.set(fs.doc(db, COL, d.id), { ...strip(d), ...stamp() }));
+            await bg(b.commit());
+        }
+    }
+};
+
+function handleUser(user) {
+    if (memberUnsub) { memberUnsub(); memberUnsub = null; }
+    if (unsub) { unsub(); unsub = null; }
+    window.currentUser = null; tk.loaded = false;
+    if (!user) { document.body.dataset.role = ''; showScreen('login'); return; }
+    if (!user.emailVerified) { showScreen('blocked', `${user.email} 尚未完成 Email 驗證，請到 MES 完成驗證。`); return; }
+    const email = emailKey(user.email);
+    showScreen('loading');
+    memberUnsub = fs.onSnapshot(fs.doc(db, 'members', email), snap => {
+        if (!snap.exists()) { showScreen('blocked', `${email} 尚未開通。請先到 MES 登入一次送出申請，由管理者核准。`); return; }
+        const m = snap.data();
+        const first = !window.currentUser;
+        window.currentUser = { email, name: m.name || '', role: m.role };
+        document.body.dataset.role = m.role;
+        if (first) startListener();
+        showScreen('app');
+    }, err => showScreen('blocked', '讀取權限失敗：' + errMsg(err)));
+}
+
+(async () => {
+    try {
+        const [appMod, authMod, fsMod] = await Promise.all([
+            import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app.js`),
+            import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-auth.js`),
+            import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-firestore.js`)
+        ]);
+        fa = authMod; fs = fsMod;
+        fs.setLogLevel('silent');
+        const app = appMod.initializeApp(firebaseConfig);
+        auth = fa.getAuth(app); auth.languageCode = 'zh-TW';
+        db = fs.getFirestore(app);
+        fs.enableIndexedDbPersistence(db).catch(e => console.warn('離線快取未啟用:', e.code));
+        fa.onAuthStateChanged(auth, handleUser);
+    } catch (e) { console.warn(e); showScreen('offline'); }
+})();
+</script>
+
+<!-- ===================== 畫面邏輯 ===================== -->
+<script>
+const $ = (id) => document.getElementById(id);
+function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+const pad = n => String(n).padStart(2, '0');
+function todayLocal() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+const WD = '日一二三四五六';
+const md = d => `${+d.slice(5, 7)}/${+d.slice(8, 10)}（${WD[new Date(d + 'T00:00').getDay()]}）`;
+const fmt = (n, dg = 0) => n == null || isNaN(n) ? '—' : Number(n).toLocaleString('zh-TW', { maximumFractionDigits: dg, minimumFractionDigits: dg });
+const canEdit = () => ['admin', 'editor'].includes(window.currentUser?.role);
+const numOnly = v => { const s = String(v ?? '').replace(/[^\d.]/g, ''); return s ? Number(s) : null; };
+
+window.toast = function (msg) {
+    const t = $('toast'); t.textContent = msg; t.style.opacity = 1;
+    clearTimeout(t._h); t._h = setTimeout(() => t.style.opacity = 0, 2800);
+};
+async function authSubmit(e) {
+    e.preventDefault();
+    try { await api.signIn($('auth-email').value, $('auth-password').value); }
+    catch (err) { toast(['auth/invalid-credential', 'auth/invalid-login-credentials', 'auth/wrong-password', 'auth/user-not-found'].includes(err.code) ? '帳號或密碼錯誤' : (err.code || '登入失敗')); }
+}
+
+// ---------- 共用 ----------
+const aliases = () => ({ ...TRUCK.DEFAULT_ALIASES, ...(tk.meta.aliases || {}) });
+const INTERVAL_ITEMS = ['大保養', '小保養', '尿素', '換機油'];
+function maxOdo() {
+    return Math.max(0, ...tk.days.map(d => d.odo || 0), ...tk.fuels.map(f => f.odo || 0), ...tk.services.map(s => s.odo || 0));
+}
+function lastDayBefore(date) { return tk.days.filter(d => d.odo && d.date < date).sort((a, b) => b.date.localeCompare(a.date))[0]; }
+function dayDocId(date) { return 'd_' + date; }
+function frequentClients(n) {
+    const since = new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10);
+    return TRUCK.clientRank(tk.days.filter(d => d.date >= since), {}).slice(0, n).map(c => c.name);
+}
+function serviceStatus() {
+    const iv = tk.meta.intervals || {};
+    const cur = maxOdo();
+    return Object.keys(iv).filter(k => iv[k] > 0).map(item => {
+        const last = tk.services.filter(s => s.item === item && s.odo).sort((a, b) => b.odo - a.odo)[0];
+        if (!last) return { item, last: null };
+        const due = last.odo + iv[item];
+        return { item, last, due, left: due - cur };
+    });
+}
+
+// ---------- 分頁 ----------
+let currentTab = 'log';
+function switchTab(tab) {
+    currentTab = tab;
+    ['log', 'report', 'settings'].forEach(t => $('tab-' + t).classList.toggle('hidden', t !== tab));
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        const on = b.dataset.tab === tab;
+        b.classList.toggle('border-amber-400', on); b.classList.toggle('text-white', on);
+        b.classList.toggle('border-transparent', !on); b.classList.toggle('text-slate-400', !on);
+    });
+}
+function renderAll() { renderLog(); renderReport(); renderSettings(); }
+window.renderAll = renderAll;
+
+// ---------- 紀錄 ----------
+function renderLog() {
+    const month = $('log-month').value;
+    const q = $('log-search').value.trim();
+    const km = TRUCK.dayKm(tk.days);
+    const rows = [
+        ...tk.days.map(d => ({ t: 'day', date: d.date, d })),
+        ...tk.fuels.map(f => ({ t: 'fuel', date: f.date, d: f })),
+        ...tk.services.map(s => ({ t: 'service', date: s.date, d: s }))
+    ].filter(r => (!month || (r.date || '').startsWith(month)) && (!q || (r.t === 'day' && (r.d.clients || []).join(' ').includes(q))))
+     .sort((a, b) => b.date.localeCompare(a.date) || (a.t === 'day' ? 1 : -1));
+
+    const days = rows.filter(r => r.t === 'day');
+    const sumKm = days.reduce((a, r) => a + (km[r.date]?.km || 0), 0);
+    $('log-summary').innerHTML = `出車 <b>${days.length}</b> 天・里程 <b>${fmt(sumKm)}</b> km`;
+
+    const due = serviceStatus().filter(s => s.last && s.left <= 1000);
+    $('due-banner').classList.toggle('hidden', !due.length);
+    $('due-banner').innerHTML = due.map(s => `<div><i class="fa-solid fa-triangle-exclamation mr-1"></i>${esc(s.item)}：${s.left < 0 ? `已超過 ${fmt(-s.left)} km` : `剩 ${fmt(s.left)} km`}（到 ${fmt(s.due)}）</div>`).join('');
+
+    if (!rows.length) { $('log-list').innerHTML = `<div class="text-center text-slate-500 text-sm py-8">${tk.days.length ? '沒有符合的紀錄' : '還沒有紀錄，按上面「出車」開始，或到「設定」匯入舊紀錄'}</div>`; return; }
+    $('log-list').innerHTML = rows.map(r => {
+        if (r.t === 'day') {
+            const k = km[r.date] || {};
+            const kmTxt = k.km != null ? `${fmt(k.km)} km${k.merged?.length ? `<div class="text-[10px] text-amber-600">含 ${k.merged.map(x => md(x).replace(/（.）/, '')).join('、')}</div>` : ''}`
+                : k.mergedInto ? `<span class="text-[11px] text-amber-600">沒抄里程</span>` : `<span class="text-[11px] text-slate-400">待下次</span>`;
+            return `<button onclick="openDayForm('${r.date}')" class="w-full text-left px-4 py-3 flex items-start gap-3">
+                <div class="w-16 shrink-0 text-sm font-medium text-slate-700">${md(r.date)}</div>
+                <div class="flex-1 min-w-0">
+                    <div class="text-slate-900">${(r.d.clients || []).map(esc).join('、') || '<span class="text-slate-400">（沒寫客戶）</span>'}</div>
+                    ${(r.d.notes || []).length ? `<div class="text-xs text-slate-500">${r.d.notes.map(esc).join('、')}</div>` : ''}
+                    <div class="text-xs text-slate-400">${r.d.odo ? fmt(r.d.odo) : '—'}</div>
+                </div>
+                <div class="text-right text-sm text-slate-700 shrink-0">${kmTxt}</div>
+            </button>`;
+        }
+        if (r.t === 'fuel') return `<button onclick="openFuelForm('${r.d.id}')" class="w-full text-left px-4 py-2.5 flex items-center gap-3 bg-amber-50/60">
+                <div class="w-16 shrink-0 text-sm text-slate-600">${md(r.date)}</div>
+                <div class="flex-1 text-sm"><i class="fa-solid fa-gas-pump text-amber-500 mr-1"></i>加油 ${fmt(r.d.liters, 1)} L・$${fmt(r.d.amount)}</div>
+                <div class="text-xs text-slate-400">${fmt(r.d.odo)}</div></button>`;
+        return `<button onclick="openServiceForm('${r.d.id}')" class="w-full text-left px-4 py-2.5 flex items-center gap-3 bg-slate-50">
+                <div class="w-16 shrink-0 text-sm text-slate-600">${md(r.date)}</div>
+                <div class="flex-1 text-sm"><i class="fa-solid fa-wrench text-slate-500 mr-1"></i>${esc(r.d.item)}${r.d.note ? `・${esc(r.d.note)}` : ''}${r.d.cost ? `・$${fmt(r.d.cost)}` : ''}</div>
+                <div class="text-xs text-slate-400">${fmt(r.d.odo)}</div></button>`;
+    }).join('');
+}
+
+// ---------- 報表 ----------
+function monthsList() {
+    const s = new Set(tk.days.map(d => d.date.slice(0, 7)));
+    tk.fuels.forEach(f => f.date && s.add(f.date.slice(0, 7)));
+    return [...s].sort();
+}
+function renderReport() {
+    const month = $('rp-month').value || todayLocal().slice(0, 7);
+    const al = aliases();
+    const r = TRUCK.monthReport(month, tk.days, tk.fuels, al);
+    const card = (label, val, sub = '') => `<div class="bg-white rounded-xl border border-slate-200 p-3"><div class="text-xs text-slate-500">${label}</div><div class="text-xl font-bold text-slate-900">${val}</div>${sub ? `<div class="text-[11px] text-slate-400">${sub}</div>` : ''}</div>`;
+    $('rp-cards').innerHTML = [
+        card('出車天數', r.trips),
+        card('里程', `${fmt(r.totalKm)} <span class="text-sm font-medium">km</span>`, r.pending.length ? '最後一天待下次出車' : ''),
+        card('油資', `$${fmt(r.amount)}`, `${r.fuelCount} 次・${fmt(r.liters, 1)} L`),
+        card('平均油耗', r.kmPerL ? `${fmt(r.kmPerL, 2)} <span class="text-sm font-medium">km/L</span>` : '—', r.kmPerL ? '' : '要有兩次加油才算得出'),
+        card('每公里油資', r.amount && r.totalKm ? `$${fmt(r.amount / r.totalKm, 1)}` : '—', '油資 ÷ 里程（概算）'),
+        card('每趟平均', r.trips ? `${fmt(r.totalKm / Math.max(1, r.trips - r.pending.length))} km` : '—')
+    ].join('');
+
+    const ms = monthsList();
+    const kms = ms.map(m => ({ m, km: TRUCK.monthReport(m, tk.days, tk.fuels, al).totalKm }));
+    const mx = Math.max(1, ...kms.map(x => x.km));
+    $('rp-months').innerHTML = kms.length ? kms.map(x => `<div class="flex items-center gap-2 text-xs">
+        <div class="w-14 text-slate-500">${+x.m.slice(0, 4) % 100}/${+x.m.slice(5)}</div>
+        <div class="flex-1 bg-slate-100 rounded h-4"><div class="h-4 rounded ${x.m === month ? 'bg-amber-500' : 'bg-slate-400'}" style="width:${x.km / mx * 100}%"></div></div>
+        <div class="w-16 text-right text-slate-700">${fmt(x.km)}</div></div>`).join('') : '<div class="text-sm text-slate-400">沒有資料</div>';
+
+    const range = $('rp-range').value;
+    let days = tk.days;
+    if (range === 'month') days = days.filter(d => d.date.startsWith(month));
+    else if (range === '3') { const d0 = new Date(month + '-01T00:00'); d0.setMonth(d0.getMonth() - 2); const s = `${d0.getFullYear()}-${pad(d0.getMonth() + 1)}`; days = days.filter(d => d.date.slice(0, 7) >= s && d.date.slice(0, 7) <= month); }
+    const rank = TRUCK.clientRank(days, al);
+    const top = Math.max(1, ...rank.map(c => c.count));
+    $('rp-clients').innerHTML = rank.length ? rank.map(c => `<div class="py-1.5 flex items-center gap-2">
+        <div class="w-28 truncate">${esc(c.name)}</div>
+        <div class="flex-1 bg-slate-100 rounded h-3"><div class="h-3 rounded bg-blue-500" style="width:${c.count / top * 100}%"></div></div>
+        <div class="w-8 text-right font-medium">${c.count}</div>
+        <div class="w-14 text-right text-[11px] text-slate-400">${md(c.last).replace(/（.）/, '')}</div></div>`).join('') : '<div class="text-slate-400 py-2">沒有資料</div>';
+
+    const st = serviceStatus();
+    const hist = [...tk.services].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
+    $('rp-service').innerHTML = (st.length ? st.map(s => s.last
+        ? `<div class="${s.left <= 1000 ? 'text-red-600 font-medium' : 'text-slate-700'}">${esc(s.item)}：上次 ${md(s.last.date).replace(/（.）/, '')}（${fmt(s.last.odo)}），下次 ${fmt(s.due)}，${s.left < 0 ? `已超過 ${fmt(-s.left)} km` : `還有 ${fmt(s.left)} km`}</div>`
+        : `<div class="text-slate-500">${esc(s.item)}：還沒有紀錄</div>`).join('') : '<div class="text-slate-400">到「設定」填保養間隔後，這裡會算下次保養。</div>')
+        + (hist.length ? `<div class="pt-2 text-xs text-slate-500">最近：${hist.map(s => `${md(s.date).replace(/（.）/, '')} ${esc(s.item)}`).join('、')}</div>` : '');
+}
+
+// ---------- 設定 ----------
+function renderSettings() {
+    const al = tk.meta.aliases || {};
+    if (document.activeElement !== $('alias-text'))
+        $('alias-text').value = Object.entries({ ...TRUCK.DEFAULT_ALIASES, ...al }).map(([k, v]) => `${k}=${v}`).join('\n');
+    const iv = tk.meta.intervals || {};
+    if (!$('interval-list').contains(document.activeElement))
+        $('interval-list').innerHTML = INTERVAL_ITEMS.map(k => `<div class="flex items-center gap-2 text-sm">
+            <div class="w-20">${k}</div><span class="text-slate-500">每</span>
+            <input type="number" inputmode="numeric" data-iv="${k}" value="${iv[k] || ''}" class="w-28 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1"><span class="text-slate-500">km</span></div>`).join('');
+    const base = location.origin + location.pathname;
+    const u = [
+        ['出車', `${base}?a=day&odo=里程&c=客戶`],
+        ['加油', `${base}?a=fuel&odo=里程&l=公升&m=金額`],
+        ['保養', `${base}?a=svc&odo=里程&i=項目`]
+    ];
+    $('shortcut-urls').innerHTML = u.map(([n, x]) => `<div><div class="font-medium text-slate-700">${n}</div>
+        <div class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 break-all font-mono">${esc(x)}</div></div>`).join('')
+        + `<p class="text-slate-500">「里程」「客戶」等字換成捷徑的變數。客戶可以一次講多個，用空白隔開。若出現「權限不足」，代表 Firestore 規則要加 truckLogs。</p>`;
+}
+function saveAliases() {
+    const map = {};
+    $('alias-text').value.split('\n').forEach(l => { const [k, v] = l.split('='); if (k?.trim() && v?.trim()) map[k.trim()] = v.trim(); });
+    api.save({ ...tk.meta, id: 'meta', kind: 'meta', aliases: map }).then(() => toast('已儲存'));
+}
+function saveIntervals() {
+    const iv = {};
+    document.querySelectorAll('[data-iv]').forEach(i => { const v = numOnly(i.value); if (v) iv[i.dataset.iv] = v; });
+    api.save({ ...tk.meta, id: 'meta', kind: 'meta', intervals: iv }).then(() => toast('已儲存'));
+}
+
+// ---------- 匯入 ----------
+let importRows = [];
+function previewImport() {
+    importRows = TRUCK.parseText($('imp-text').value, Number($('imp-year').value) || new Date().getFullYear(), aliases());
+    const ok = importRows.filter(r => !r.invalid);
+    const exist = new Set(tk.days.map(d => d.date));
+    const warnN = importRows.filter(r => r.warn.length).length;
+    $('imp-preview').innerHTML = !importRows.length ? '<div class="text-sm text-slate-500">沒有內容</div>' : `
+        <div class="text-sm mb-2">共 <b>${ok.length}</b> 天${warnN ? `，<span class="text-amber-600"><b>${warnN}</b> 行要看一下（黃色）</span>` : ''}${ok.some(r => exist.has(r.date)) ? '，<span class="text-blue-600">藍字日期已有資料，會合併</span>' : ''}</div>
+        <div class="max-h-80 overflow-y-auto border border-slate-200 rounded-lg text-xs">
+        <table class="w-full"><thead class="bg-slate-100 sticky top-0"><tr><th class="p-1.5 text-left">日期</th><th class="p-1.5 text-left">客戶</th><th class="p-1.5 text-left">備註／保養</th><th class="p-1.5 text-right">里程</th></tr></thead><tbody>
+        ${importRows.map(r => r.invalid ? `<tr class="bg-red-50"><td colspan="4" class="p-1.5 text-red-600">看不懂：${esc(r.raw)}</td></tr>`
+            : `<tr class="${r.warn.length ? 'bg-amber-50' : ''} border-t border-slate-100">
+                <td class="p-1.5 whitespace-nowrap ${exist.has(r.date) ? 'text-blue-600' : ''}">${r.date.slice(5).replace('-', '/')}</td>
+                <td class="p-1.5">${r.clients.map(esc).join('、')}</td>
+                <td class="p-1.5 text-slate-500">${[...r.notes, ...r.services.map(s => '🔧' + s)].map(esc).join('、')}${r.warn.length ? `<div class="text-amber-700">⚠ ${r.warn.map(esc).join('；')}</div>` : ''}</td>
+                <td class="p-1.5 text-right">${r.odo ? fmt(r.odo) : '—'}</td></tr>`).join('')}
+        </tbody></table></div>
+        <button onclick="doImport()" class="mt-3 w-full bg-blue-600 text-white font-medium py-2.5 rounded-xl">匯入 ${ok.length} 天</button>`;
+}
+async function doImport() {
+    const ok = importRows.filter(r => !r.invalid);
+    if (!ok.length) return;
+    const byDate = Object.fromEntries(tk.days.map(d => [d.date, d]));
+    const docs = [];
+    ok.forEach(r => {
+        const add = { id: dayDocId(r.date), kind: 'day', date: r.date, odo: r.odo, clients: r.clients, notes: r.notes, source: 'import' };
+        const merged = TRUCK.mergeDay(byDate[r.date], add);
+        byDate[r.date] = merged; docs.push(merged);
+        r.services.forEach(item => docs.push({ id: `s_${r.date}_${item}`, kind: 'service', date: r.date, odo: r.odo, item, source: 'import' }));
+    });
+    // 同一天重複的行只留合併後最後一份
+    const uniq = Object.values(Object.fromEntries(docs.map(d => [d.id, d])));
+    try { await api.saveMany(uniq); toast(`已匯入 ${ok.length} 天`); $('imp-preview').innerHTML = ''; $('imp-text').value = ''; switchTab('log'); }
+    catch (e) { /* toast 已顯示 */ }
+}
+
+// ---------- 表單 ----------
+function openModal(html) { $('modal-body').innerHTML = html; $('modal').classList.remove('hidden'); }
+function closeModal() { $('modal').classList.add('hidden'); }
+const inputCls = 'w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500';
+const lbl = t => `<label class="text-xs font-medium text-slate-600">${t}</label>`;
+const head = (t, delFn) => `<div class="flex items-center justify-between mb-3"><h3 class="font-bold text-slate-800">${t}</h3>${delFn ? `<button onclick="${delFn}" class="text-red-500 text-sm"><i class="fa-solid fa-trash"></i> 刪除</button>` : ''}</div>`;
+const odoHint = date => { const p = lastDayBefore(date || todayLocal()); return p ? `上次 ${md(p.date).replace(/（.）/, '')}：${fmt(p.odo)}` : ''; };
+
+function openDayForm(date) {
+    const d = date ? tk.days.find(x => x.date === date) : null;
+    const dt = d?.date || todayLocal();
+    const freq = frequentClients(14);
+    openModal(`${head(d ? '編輯出車' : '今天出車', d ? `delDay('${d.date}')` : '')}
+        <div class="space-y-3">
+            <div>${lbl('日期')}<input type="date" id="f-date" value="${dt}" ${d ? 'disabled' : ''} class="${inputCls}"></div>
+            <div>${lbl('出發前里程')}<input type="number" inputmode="numeric" id="f-odo" value="${d?.odo || ''}" class="${inputCls}"><div class="text-[11px] text-slate-400 mt-0.5">${odoHint(dt)}</div></div>
+            <div>${lbl('客戶（空白隔開）')}<input id="f-clients" value="${esc((d?.clients || []).join(' '))}" oninput="syncChips()" class="${inputCls}">
+                <div id="chips" class="flex flex-wrap gap-1.5 mt-2">${freq.map(c => `<button type="button" onclick="toggleChip(this)" data-c="${esc(c)}" class="chip text-xs border border-slate-300 rounded-full px-2.5 py-1">${esc(c)}</button>`).join('')}</div></div>
+            <div>${lbl('備註（載模具、聯絡人…）')}<input id="f-notes" value="${esc((d?.notes || []).join(' '))}" class="${inputCls}"></div>
+            <button onclick="submitDay(${d ? 'true' : 'false'})" class="w-full bg-blue-600 text-white font-medium py-2.5 rounded-xl">儲存</button>
+        </div>`);
+    syncChips();
+}
+function syncChips() {
+    const set = new Set(TRUCK.splitInput($('f-clients').value));
+    document.querySelectorAll('#chips .chip').forEach(b => b.classList.toggle('on', set.has(b.dataset.c)));
+}
+function toggleChip(b) {
+    const list = TRUCK.splitInput($('f-clients').value); const c = b.dataset.c;
+    const i = list.indexOf(c); if (i >= 0) list.splice(i, 1); else list.push(c);
+    $('f-clients').value = list.join(' '); syncChips();
+}
+function validateOdo(date, odo) {
+    if (!odo) return true;
+    const p = lastDayBefore(date);
+    if (p && odo < p.odo) return confirm(`里程 ${fmt(odo)} 比 ${md(p.date)} 的 ${fmt(p.odo)} 還少，確定嗎？`);
+    if (p && odo - p.odo > 1500) return confirm(`比上次多了 ${fmt(odo - p.odo)} km，確定嗎？`);
+    return true;
+}
+async function submitDay(isEdit) {
+    const date = $('f-date').value; if (!date) return toast('請選日期');
+    const odo = numOnly($('f-odo').value);
+    if (!validateOdo(date, odo)) return;
+    const doc = { id: dayDocId(date), kind: 'day', date, odo, clients: TRUCK.splitInput($('f-clients').value), notes: TRUCK.splitInput($('f-notes').value) };
+    const old = tk.days.find(x => x.date === date);
+    const final = isEdit ? { ...old, ...doc } : TRUCK.mergeDay(old, doc);
+    if (!isEdit && old) toast('這天已有紀錄，已合併');
+    closeModal(); await api.save(final).catch(() => {});
+}
+function delDay(date) { if (confirm(`刪除 ${md(date)} 的出車紀錄？`)) { api.remove(dayDocId(date)); closeModal(); } }
+
+function openFuelForm(id) {
+    const f = id ? tk.fuels.find(x => x.id === id) : null;
+    const dt = f?.date || todayLocal();
+    openModal(`${head(f ? '編輯加油' : '加油（跳停）', f ? `delDoc('${f.id}','這筆加油')` : '')}
+        <div class="space-y-3">
+            <div>${lbl('日期')}<input type="date" id="f-date" value="${dt}" class="${inputCls}"></div>
+            <div>${lbl('加油時里程')}<input type="number" inputmode="numeric" id="f-odo" value="${f?.odo || ''}" class="${inputCls}"><div class="text-[11px] text-slate-400 mt-0.5">${odoHint(dt)}</div></div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>${lbl('公升')}<input type="number" inputmode="decimal" id="f-l" value="${f?.liters || ''}" class="${inputCls}"></div>
+                <div>${lbl('金額')}<input type="number" inputmode="numeric" id="f-m" value="${f?.amount || ''}" class="${inputCls}"></div>
+            </div>
+            <p class="text-[11px] text-slate-500">油耗用「這次公升 ÷ 跟上次加油之間的里程」算，所以每次都要跳停加滿、都要記。</p>
+            <button onclick="submitFuel('${f?.id || ''}')" class="w-full bg-amber-500 text-white font-medium py-2.5 rounded-xl">儲存</button>
+        </div>`);
+}
+async function submitFuel(id) {
+    const doc = { id: id || 'f_' + api.newId(), kind: 'fuel', date: $('f-date').value, odo: numOnly($('f-odo').value), liters: numOnly($('f-l').value), amount: numOnly($('f-m').value) };
+    if (!doc.odo || !doc.liters) return toast('里程和公升一定要填');
+    closeModal(); await api.save(doc).catch(() => {});
+}
+
+function openServiceForm(id) {
+    const s = id ? tk.services.find(x => x.id === id) : null;
+    const dt = s?.date || todayLocal();
+    openModal(`${head(s ? '編輯保養' : '保養／加尿素', s ? `delDoc('${s.id}','這筆保養')` : '')}
+        <div class="space-y-3">
+            <div>${lbl('日期')}<input type="date" id="f-date" value="${dt}" class="${inputCls}"></div>
+            <div>${lbl('項目')}<input id="f-item" list="svc-items" value="${esc(s?.item || '')}" class="${inputCls}">
+                <datalist id="svc-items">${INTERVAL_ITEMS.concat(['換輪胎', '驗車']).map(x => `<option value="${x}">`).join('')}</datalist></div>
+            <div>${lbl('里程')}<input type="number" inputmode="numeric" id="f-odo" value="${s?.odo || ''}" class="${inputCls}"><div class="text-[11px] text-slate-400 mt-0.5">${odoHint(dt)}</div></div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>${lbl('費用（選填）')}<input type="number" inputmode="numeric" id="f-cost" value="${s?.cost || ''}" class="${inputCls}"></div>
+                <div>${lbl('備註')}<input id="f-note" value="${esc(s?.note || '')}" class="${inputCls}"></div>
+            </div>
+            <button onclick="submitService('${s?.id || ''}')" class="w-full bg-slate-800 text-white font-medium py-2.5 rounded-xl">儲存</button>
+        </div>`);
+}
+async function submitService(id) {
+    const doc = { id: id || 's_' + api.newId(), kind: 'service', date: $('f-date').value, item: $('f-item').value.trim(), odo: numOnly($('f-odo').value), cost: numOnly($('f-cost').value), note: $('f-note').value.trim() };
+    if (!doc.item) return toast('請填項目');
+    closeModal(); await api.save(doc).catch(() => {});
+}
+function delDoc(id, name) { if (confirm(`刪除${name}？`)) { api.remove(id); closeModal(); } }
+
+// ---------- 捷徑：網址帶參數自動存 ----------
+const params = new URLSearchParams(location.search);
+const pending = params.get('a') ? Object.fromEntries(params.entries()) : null;
+if (pending) document.getElementById('auth-pending-note').classList.remove('hidden');
+
+function saveOrFlag(doc) {
+    api.save(doc).catch(() => {
+        $('saved-banner').className = 'mb-3 bg-red-50 border border-red-300 text-red-700 rounded-xl px-4 py-3';
+        $('saved-banner').innerHTML = '<b>沒有存成功</b><div class="text-sm mt-1">請回到捷徑再試一次，或手動新增。</div>';
+    });
+}
+window.onFirstLoad = async function () {
+    if (!pending) return;
+    history.replaceState(null, '', location.pathname); // 重新整理不會再存一次
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(pending.d || '') ? pending.d : todayLocal();
+    const odo = numOnly(pending.odo);
+    const nonce = String(pending.t || '').replace(/[^\w-]/g, '').slice(0, 40);
+    let msg = '';
+    try {
+        if (pending.a === 'day') {
+            const add = { id: dayDocId(date), kind: 'day', date, odo, clients: TRUCK.splitInput(pending.c || ''), notes: TRUCK.splitInput(pending.n || ''), source: 'shortcut' };
+            const merged = TRUCK.mergeDay(tk.days.find(x => x.date === date), add);
+            saveOrFlag(merged);
+            const p = lastDayBefore(date);
+            msg = `<b>出車已記錄 ✅</b><div class="text-sm mt-1">${md(date)}　${merged.clients.map(esc).join('、') || '（沒有客戶）'}　里程 ${fmt(merged.odo)}</div>`
+                + (p && merged.odo ? `<div class="text-xs mt-1">${md(p.date)}那趟跑了 ${fmt(merged.odo - p.odo)} km</div>` : '')
+                + (p && merged.odo && (merged.odo < p.odo || merged.odo - p.odo > 1500) ? `<div class="text-xs mt-1 text-red-600">⚠ 里程看起來不對，請點下面紀錄修改</div>` : '');
+        } else if (pending.a === 'fuel') {
+            const doc = { id: 'f_' + (nonce || api.newId()), kind: 'fuel', date, odo, liters: numOnly(pending.l), amount: numOnly(pending.m), source: 'shortcut' };
+            saveOrFlag(doc);
+            const prev = tk.fuels.filter(f => f.odo && f.odo < odo && f.id !== doc.id).sort((a, b) => b.odo - a.odo)[0];
+            msg = `<b>加油已記錄 ✅</b><div class="text-sm mt-1">${md(date)}　${fmt(doc.liters, 1)} L　$${fmt(doc.amount)}　里程 ${fmt(odo)}</div>`
+                + (prev && doc.liters ? `<div class="text-xs mt-1">這桶油耗：${fmt((odo - prev.odo) / doc.liters, 2)} km/L（${fmt(odo - prev.odo)} km）</div>` : '');
+        } else if (pending.a === 'svc') {
+            const item = (pending.i || '').trim() || '保養';
+            const doc = { id: nonce ? 's_' + nonce : `s_${date}_${item}`, kind: 'service', date, odo, item, source: 'shortcut' };
+            saveOrFlag(doc);
+            msg = `<b>${esc(item)}已記錄 ✅</b><div class="text-sm mt-1">${md(date)}　里程 ${fmt(odo)}</div>`;
+        }
+    } catch (e) { msg = `<b class="text-red-700">沒有存成功</b><div class="text-sm mt-1">請回到捷徑再試一次，或手動新增。</div>`; }
+    if (msg) { $('saved-banner').innerHTML = msg; $('saved-banner').classList.remove('hidden'); switchTab('log'); }
+};
+
+// ---------- 初始 ----------
+$('log-month').value = todayLocal().slice(0, 7);
+$('rp-month').value = todayLocal().slice(0, 7);
+$('imp-year').value = new Date().getFullYear();
+switchTab('log');
+</script>
+</body>
+</html>
