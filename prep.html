@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>備貨</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="備貨">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #f1f5f9; -webkit-tap-highlight-color: transparent; }
+        .hidden { display: none !important; }
+        body:not([data-role="admin"]):not([data-role="editor"]) .need-editor { display: none !important; }
+        input, select, textarea { font-size: 16px; }
+        .line { border: 3px solid transparent; }
+        .line.part { border-color: #f59e0b; background: #fffbeb; }
+        .line.done { border-color: #22c55e; background: #f0fdf4; }
+        .line.over { border-color: #ef4444; background: #fef2f2; }
+        .line.done .btn-full { visibility: hidden; }
+        .pick-btn { width: 60px; height: 54px; border-radius: 12px; font-size: 28px; font-weight: 700; flex: none; }
+        .cnt { height: 54px; }
+        .over .cnt { color: #dc2626; border-color: #ef4444; }
+        .done .cnt { color: #15803d; border-color: #22c55e; }
+        .hide-done .prod-block.all-done { display: none; }
+    </style>
+</head>
+<body class="min-h-screen pb-28">
+
+<!-- ===================== 登入 ===================== -->
+<div id="auth-screen" class="fixed inset-0 z-[60] bg-slate-100 flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div class="text-center mb-5">
+            <div class="w-12 h-12 mx-auto rounded-xl bg-slate-900 text-white flex items-center justify-center text-xl"><i class="fa-solid fa-dolly"></i></div>
+            <h1 class="mt-3 text-lg font-bold text-slate-800">備貨</h1>
+            <p class="text-xs text-slate-500 mt-1">使用射出成型管理系統（MES）的帳號登入</p>
+        </div>
+        <div id="auth-loading" class="text-center text-sm text-slate-500 py-6"><i class="fa-solid fa-spinner fa-spin mr-2"></i>載入中…</div>
+        <form id="auth-login" class="hidden space-y-3" onsubmit="authSubmit(event)">
+            <div>
+                <label class="text-xs font-medium text-slate-600">Email</label>
+                <input type="email" id="auth-email" required autocomplete="username" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="text-xs font-medium text-slate-600">密碼</label>
+                <input type="password" id="auth-password" required minlength="6" autocomplete="current-password" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl text-sm">登入</button>
+            <p class="text-xs text-slate-500 text-center">還沒有帳號或忘記密碼？請到 <a href="index.html" class="text-blue-600 underline">MES</a> 註冊／重設</p>
+        </form>
+        <div id="auth-blocked" class="hidden text-sm text-slate-700 space-y-3">
+            <p id="auth-blocked-text"></p>
+            <a href="index.html" class="block text-center w-full bg-blue-600 text-white font-medium py-2.5 rounded-xl">前往 MES</a>
+            <button onclick="api.logout()" class="w-full text-slate-500 text-xs underline">登出</button>
+        </div>
+        <div id="auth-offline" class="hidden text-sm text-slate-700 text-center space-y-2">
+            <p><i class="fa-solid fa-wifi text-amber-500 mr-1"></i>無法連線雲端，請確認網路後重新整理。</p>
+        </div>
+    </div>
+</div>
+
+<!-- ===================== 頂部 ===================== -->
+<header class="bg-slate-900 text-white sticky top-0 z-30">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <i class="fa-solid fa-dolly text-amber-400"></i>
+            <span class="font-bold">備貨</span>
+            <span id="sync-badge" class="text-[11px] text-slate-400 ml-1"></span>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+            <a href="index.html" class="text-slate-300 hover:text-white"><i class="fa-solid fa-industry mr-1"></i>MES</a>
+            <span id="user-chip" class="hidden sm:inline text-slate-400"></span>
+            <button onclick="api.logout()" class="text-slate-300 hover:text-white"><i class="fa-solid fa-right-from-bracket"></i></button>
+        </div>
+    </div>
+    <nav id="tabs" class="max-w-3xl mx-auto px-2 flex text-sm">
+        <button data-tab="list" onclick="switchTab('list')" class="tab-btn flex-1 py-2.5 border-b-2">備貨中</button>
+        <button data-tab="archive" onclick="switchTab('archive')" class="tab-btn flex-1 py-2.5 border-b-2">封存</button>
+        <button data-tab="settings" onclick="switchTab('settings')" class="tab-btn flex-1 py-2.5 border-b-2">設定</button>
+    </nav>
+</header>
+
+<main class="max-w-3xl mx-auto px-3 py-4">
+    <!-- ===== 備貨中 ===== -->
+    <section id="tab-list">
+        <div id="order-list" class="space-y-3"></div>
+    </section>
+
+    <!-- ===== 封存 ===== -->
+    <section id="tab-archive" class="hidden">
+        <p class="text-xs text-slate-500 mb-2">按過「已出貨」的單，以及出貨日期過了 3 天的單，會自動收到這裡。資料不會刪除。</p>
+        <div id="archive-list" class="space-y-2"></div>
+    </section>
+
+    <!-- ===== 設定 ===== -->
+    <section id="tab-settings" class="hidden space-y-6">
+        <div>
+            <h2 class="font-bold text-slate-800 mb-1">客戶名單</h2>
+            <p class="text-xs text-slate-500 mb-2">只存名字。建備貨單時從這裡選。</p>
+            <div class="flex gap-2 mb-2">
+                <input id="new-customer" placeholder="客戶名稱" class="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none">
+                <button onclick="addCustomer()" class="bg-slate-900 text-white px-4 rounded-xl text-sm"><i class="fa-solid fa-plus mr-1"></i>新增</button>
+            </div>
+            <div id="customer-list" class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100"></div>
+        </div>
+        <div>
+            <h2 class="font-bold text-slate-800 mb-1">顏色名單</h2>
+            <p class="text-xs text-slate-500 mb-2">每個產品在 MES「產品」裡勾選自己有哪些顏色。這裡的順序就是畫面上顏色的排列順序。</p>
+            <div class="flex gap-2 mb-2">
+                <input id="new-color" placeholder="顏色名稱" class="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none">
+                <button onclick="addColor()" class="bg-slate-900 text-white px-4 rounded-xl text-sm"><i class="fa-solid fa-plus mr-1"></i>新增</button>
+            </div>
+            <div id="color-list" class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100"></div>
+        </div>
+        <div>
+            <h2 class="font-bold text-slate-800 mb-1">產品顏色設定進度</h2>
+            <div id="product-setup" class="text-sm text-slate-600"></div>
+        </div>
+    </section>
+
+    <!-- ===== 備貨單內容（點進一張單） ===== -->
+    <section id="tab-detail" class="hidden"></section>
+</main>
+
+<button id="fab" onclick="openNewOrder()" class="fixed bottom-6 right-5 z-20 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg px-5 py-3.5 font-medium">
+    <i class="fa-solid fa-plus mr-1"></i>新增備貨單
+</button>
+
+<div id="modal" class="hidden fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onclick="if(event.target===this)closeModal()">
+    <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl max-h-[92vh] overflow-y-auto p-5" id="modal-body"></div>
+</div>
+
+<div id="toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2.5 rounded-xl text-sm opacity-0 pointer-events-none transition-opacity duration-300 z-[70]"></div>
+
+<!-- ===================== 純計算（無 DOM，可單獨測試） ===================== -->
+<script id="prep-core">
+const PREP = (() => {
+    const ARCHIVE_AFTER_DAYS = 3;
+    function daysBetween(a, b) {   // 'YYYY-MM-DD'，b − a
+        const [y1, m1, d1] = a.split('-').map(Number), [y2, m2, d2] = b.split('-').map(Number);
+        return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+    }
+    function lines(order) {
+        return Object.entries(order.lines || {}).map(([id, l]) => ({ ...l, id }))
+            .sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    }
+    function lineState(l) {
+        const p = Number(l.picked) || 0, q = Number(l.qty) || 0;
+        if (p > q) return 'over';
+        if (p === q) return 'done';
+        return p > 0 ? 'part' : '';
+    }
+    function stats(order) {
+        const ls = lines(order);
+        let qty = 0, picked = 0, done = 0, over = 0;
+        ls.forEach(l => {
+            const q = Number(l.qty) || 0, p = Number(l.picked) || 0;
+            qty += q; picked += Math.min(p, q);
+            const s = lineState(l); if (s === 'done') done++; if (s === 'over') over++;
+        });
+        return { lines: ls.length, qty, picked, done, over, complete: ls.length > 0 && done === ls.length };
+    }
+    // 同一個產品的各顏色收成一組，產品順序照第一次加入的順序
+    function groupByProduct(order) {
+        const groups = new Map();
+        lines(order).forEach(l => {
+            const k = l.productId || ('?' + l.name);
+            if (!groups.has(k)) groups.set(k, { productId: l.productId, shipCode: l.shipCode, name: l.name, lines: [] });
+            groups.get(k).lines.push(l);
+        });
+        return [...groups.values()].map(g => ({
+            ...g,
+            qty: g.lines.reduce((a, l) => a + (Number(l.qty) || 0), 0),
+            picked: g.lines.reduce((a, l) => a + (Number(l.picked) || 0), 0),
+            allDone: g.lines.every(l => lineState(l) === 'done')
+        }));
+    }
+    function isArchived(order, today) {
+        if (order.status === 'shipped') return true;
+        return !!order.shipDate && daysBetween(order.shipDate, today) > ARCHIVE_AFTER_DAYS;
+    }
+    // 打單用文字：每個出貨品項一行，顏色加總
+    function summaryText(order) {
+        const gs = groupByProduct(order);
+        const out = [`${order.customer}　出貨 ${order.shipDate || ''}`];
+        gs.forEach(g => {
+            const diff = g.picked !== g.qty ? `（單上 ${g.qty}）` : '';
+            out.push(`${g.shipCode || '—'} ${g.name}：${g.picked} 件${diff}`);
+        });
+        out.push(`合計 ${gs.reduce((a, g) => a + g.picked, 0)} 件`);
+        return out.join('\n');
+    }
+    // 在現有單裡找同產品同顏色的行（追加時合併數量用）
+    function findLine(order, productId, color) {
+        return lines(order).find(l => l.productId === productId && (l.color || '') === (color || ''));
+    }
+    return { ARCHIVE_AFTER_DAYS, daysBetween, lines, lineState, stats, groupByProduct, isArchived, summaryText, findLine };
+})();
+window.prep = window.prep || { orders: [], customers: [], colors: [], products: [] };   // 雲端層（module）載入前先有空資料
+if (typeof module !== 'undefined') module.exports = PREP;
+</script>
+
+<!-- ===================== 雲端層 ===================== -->
+<script type="module">
+const FB_VER = '9.22.1';
+// 與 MES（index.html）相同的 Firebase 專案；同一個網站，登入狀態共用
+const firebaseConfig = {
+    apiKey: "AIzaSyDqFzF8L3N1-gxmycxJc8Y4FFQKXiNN2ds",
+    authDomain: "sunghsing.firebaseapp.com",
+    databaseURL: "https://sunghsing-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "sunghsing",
+    storageBucket: "sunghsing.firebasestorage.app",
+    messagingSenderId: "12105900713",
+    appId: "1:12105900713:web:c747d7d6a82f754b90ffb8",
+    measurementId: "G-CQNZHLEVHD"
+};
+// 備貨專用 collections，前綴 prep；產品直接讀 MES 的 products
+const COL = { orders: 'prepOrders', customers: 'prepCustomers', meta: 'prepMeta' };
+const ROLE_LABEL = { admin: '管理者', editor: '技術員', operator: '作業員' };
+
+window.prep = { orders: [], customers: [], colors: [], products: [] };
+window.currentUser = null;
+const DEFAULT_COLORS = ['磚紅', '粉紅', '大理石紅', '黑色', '亮黑', '白色', '象牙白', '藍色', '綠色', '紅瓦仔', '黑瓦仔'];
+let seeded = false;
+
+let fa, fs, auth, db;
+let unsubs = [], memberUnsub = null;
+const syncMeta = {};
+const $ = (id) => document.getElementById(id);
+const emailKey = (e) => String(e || '').trim().toLowerCase();
+
+function showScreen(name, text) {
+    ['auth-loading', 'auth-login', 'auth-blocked', 'auth-offline'].forEach(id => $(id).classList.add('hidden'));
+    if (name === 'app') { $('auth-screen').classList.add('hidden'); return; }
+    $('auth-screen').classList.remove('hidden');
+    $('auth-' + name).classList.remove('hidden');
+    if (text) $('auth-blocked-text').textContent = text;
+}
+
+function updateSync() {
+    const m = Object.values(syncMeta);
+    let t = '● 已同步', c = 'text-emerald-400';
+    if (m.some(x => x.hasPendingWrites)) { t = '● 同步中…'; c = 'text-sky-400'; }
+    else if (m.some(x => x.fromCache)) { t = '● 離線（連線後自動上傳）'; c = 'text-amber-400'; }
+    const el = $('sync-badge'); el.textContent = t; el.className = 'text-[11px] ml-1 ' + c;
+}
+
+function errMsg(e) {
+    const code = e?.code || '';
+    const map = {
+        'permission-denied': '權限不足：Firestore 規則尚未開放，或您的角色無法執行此操作',
+        'not-found': '這張單已經被刪除',
+        'auth/invalid-credential': '帳號或密碼錯誤',
+        'auth/invalid-login-credentials': '帳號或密碼錯誤',
+        'auth/too-many-requests': '嘗試次數過多，請稍後再試',
+        'auth/network-request-failed': '網路連線失敗'
+    };
+    return map[code] || `操作失敗（${code || e?.message || '未知錯誤'}）`;
+}
+function bg(p) { p.catch(e => { console.warn(e); window.toast(errMsg(e)); }); }
+
+let refreshTimer = null;
+function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => window.renderAll && window.renderAll(), 60); }
+
+function listen(key, ref, onData) {
+    unsubs.push(fs.onSnapshot(ref, { includeMetadataChanges: true }, snap => {
+        syncMeta[key] = { fromCache: snap.metadata.fromCache, hasPendingWrites: snap.metadata.hasPendingWrites };
+        updateSync(); onData(snap); scheduleRefresh();
+    }, err => { console.warn(key, err); window.toast(errMsg(err)); }));
+}
+function stopListeners() { unsubs.forEach(u => u()); unsubs = []; Object.keys(syncMeta).forEach(k => delete syncMeta[k]); }
+
+function startListeners() {
+    stopListeners();
+    const rows = snap => snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    listen('orders', fs.collection(db, COL.orders), s => { window.prep.orders = rows(s); });
+    listen('customers', fs.collection(db, COL.customers), s => {
+        window.prep.customers = rows(s).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-Hant'));
+    });
+    listen('colors', fs.doc(db, COL.meta, 'colors'), s => {
+        window.prep.colors = s.exists() ? (s.data().list || []) : [];
+        // 第一次使用：雲端確定沒有顏色名單，放入預設值
+        if (!s.exists() && !s.metadata.fromCache && !seeded) { seeded = true; window.api.saveColors(DEFAULT_COLORS); }
+    });
+    listen('products', fs.collection(db, 'products'), s => {
+        window.prep.products = rows(s).sort((a, b) => String(a.shipCode || a.code).localeCompare(String(b.shipCode || b.code)));
+    });
+}
+
+const now = () => new Date().toISOString();
+const who = () => window.currentUser?.email || '';
+const stamp = () => ({ updatedAt: now(), updatedBy: who() });
+const lineId = () => 'L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const orderRef = (id) => fs.doc(db, COL.orders, id);
+
+window.api = {
+    async signIn(email, pw) { await fa.signInWithEmailAndPassword(auth, email.trim(), pw); },
+    async logout() { await fa.signOut(auth); },
+
+    // ---- 備貨單 ----
+    createOrder(customer, shipDate) {
+        const ref = fs.doc(fs.collection(db, COL.orders));
+        bg(fs.setDoc(ref, { customer, shipDate, status: 'open', lines: {}, createdAt: now(), createdBy: who(), ...stamp() }));
+        return ref.id;
+    },
+    // 加一個品項的各顏色件數；同產品同顏色已存在就把件數加上去（追加合併）
+    addItems(order, product, colorQtys) {
+        const upd = { ...stamp() };
+        let seq = Date.now();
+        colorQtys.forEach(({ color, qty }) => {
+            const ex = PREP.findLine(order, product.id, color);
+            if (ex) upd[`lines.${ex.id}.qty`] = fs.increment(qty);
+            else upd[`lines.${lineId()}`] = { productId: product.id, shipCode: product.shipCode || '', name: product.name, color: color || '', qty, picked: 0, seq: seq++ };
+        });
+        bg(fs.updateDoc(orderRef(order.id), upd));
+    },
+    // 搬貨：＋／－ 用 increment，兩個人同時按同一行也不會互相蓋掉
+    bumpPicked(orderId, lid, delta) { bg(fs.updateDoc(orderRef(orderId), { [`lines.${lid}.picked`]: fs.increment(delta), ...stamp() })); },
+    setPicked(orderId, lid, n) { bg(fs.updateDoc(orderRef(orderId), { [`lines.${lid}.picked`]: n, ...stamp() })); },
+    setQty(orderId, lid, n) { bg(fs.updateDoc(orderRef(orderId), { [`lines.${lid}.qty`]: n, ...stamp() })); },
+    removeLine(orderId, lid) { bg(fs.updateDoc(orderRef(orderId), { [`lines.${lid}`]: fs.deleteField(), ...stamp() })); },
+    updateOrder(orderId, fields) { bg(fs.updateDoc(orderRef(orderId), { ...fields, ...stamp() })); },
+    setShipped(orderId, shipped) {
+        bg(fs.updateDoc(orderRef(orderId), shipped
+            ? { status: 'shipped', shippedAt: now(), shippedBy: who(), ...stamp() }
+            : { status: 'open', shippedAt: fs.deleteField(), shippedBy: fs.deleteField(), ...stamp() }));
+    },
+    deleteOrder(orderId) { bg(fs.deleteDoc(orderRef(orderId))); },
+
+    // ---- 名單 ----
+    addCustomer(name) { const ref = fs.doc(fs.collection(db, COL.customers)); bg(fs.setDoc(ref, { name, ...stamp() })); },
+    deleteCustomer(id) { bg(fs.deleteDoc(fs.doc(db, COL.customers, id))); },
+    saveColors(list) { bg(fs.setDoc(fs.doc(db, COL.meta, 'colors'), { list, ...stamp() })); },
+
+    // ---- 產品（寫回 MES 的 products；成型數據先放佔位值，週期 999 = 未填） ----
+    createProduct({ shipCode, name, colors }) {
+        const id = 'p_' + Date.now();
+        const p = { code: shipCode || ('SHIP-' + Date.now().toString(36).toUpperCase()), name, shipCode, colors,
+            material: '未填', cavities: 1, partWeight: 1, runnerWeight: 0, cycleTime: 999, ...stamp() };
+        bg(fs.setDoc(fs.doc(db, 'products', id), p));
+        return { ...p, id };
+    },
+    updateProductColors(id, colors) { bg(fs.updateDoc(fs.doc(db, 'products', id), { colors, ...stamp() })); }
+};
+
+function handleUser(user) {
+    if (memberUnsub) { memberUnsub(); memberUnsub = null; }
+    stopListeners();
+    window.currentUser = null;
+    window.prep = { orders: [], customers: [], colors: [], products: [] };
+    if (!user) { document.body.dataset.role = ''; showScreen('login'); return; }
+    if (!user.emailVerified) { showScreen('blocked', `${user.email} 尚未完成 Email 驗證，請到 MES 完成驗證。`); return; }
+    const email = emailKey(user.email);
+    showScreen('loading');
+    memberUnsub = fs.onSnapshot(fs.doc(db, 'members', email), snap => {
+        if (!snap.exists()) {
+            stopListeners(); window.currentUser = null; document.body.dataset.role = '';
+            showScreen('blocked', `${email} 尚未開通。請先到 MES 登入一次送出申請，由管理者核准。`);
+            return;
+        }
+        const m = snap.data();
+        const changed = window.currentUser?.role !== m.role;
+        window.currentUser = { email, name: m.name || user.displayName || '', role: m.role };
+        document.body.dataset.role = m.role;
+        $('user-chip').textContent = `${window.currentUser.name || email}（${ROLE_LABEL[m.role] || m.role}）`;
+        if (changed) startListeners();
+        showScreen('app');
+        scheduleRefresh();
+    }, err => { console.warn(err); showScreen('blocked', '讀取權限失敗：' + errMsg(err)); });
+}
+
+(async () => {
+    try {
+        const [appMod, authMod, fsMod] = await Promise.all([
+            import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app.js`),
+            import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-auth.js`),
+            import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-firestore.js`)
+        ]);
+        fa = authMod; fs = fsMod;
+        fs.setLogLevel('silent');
+        const app = appMod.initializeApp(firebaseConfig);
+        auth = fa.getAuth(app);
+        auth.languageCode = 'zh-TW';
+        db = fs.getFirestore(app);
+        fs.enableIndexedDbPersistence(db).catch(e => console.warn('離線快取未啟用:', e.code));
+        fa.onAuthStateChanged(auth, handleUser);
+    } catch (e) {
+        console.warn('Firebase 載入失敗', e);
+        showScreen('offline');
+    }
+})();
+</script>
+
+<!-- ===================== 畫面邏輯 ===================== -->
+<script>
+const $ = (id) => document.getElementById(id);
+function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function todayLocal(offset = 0) { const d = new Date(); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+const canEdit = () => ['admin', 'editor'].includes(window.currentUser?.role);
+const toInt = (v) => { const n = parseInt(String(v).replace(/[^\d-]/g, ''), 10); return Number.isFinite(n) ? n : NaN; };
+
+window.toast = function (msg) {
+    const t = $('toast'); t.textContent = msg; t.style.opacity = 1;
+    clearTimeout(t._h); t._h = setTimeout(() => t.style.opacity = 0, 2500);
+};
+async function authSubmit(e) {
+    e.preventDefault();
+    try { await api.signIn($('auth-email').value, $('auth-password').value); }
+    catch (err) { toast({ 'auth/invalid-credential': '帳號或密碼錯誤', 'auth/invalid-login-credentials': '帳號或密碼錯誤', 'auth/too-many-requests': '嘗試次數過多，請稍後再試' }[err.code] || '登入失敗'); }
+}
+function openModal(html) { $('modal-body').innerHTML = html; $('modal').classList.remove('hidden'); }
+function closeModal() { $('modal').classList.add('hidden'); $('modal-body').innerHTML = ''; }
+
+function dateLabel(d) {
+    if (!d) return '未定日期';
+    const diff = PREP.daysBetween(todayLocal(), d);
+    const tag = { 0: '今天', 1: '明天', 2: '後天', [-1]: '昨天' }[diff];
+    const [, m, dd] = d.split('-');
+    return `${Number(m)}/${Number(dd)}${tag ? `（${tag}）` : ''}`;
+}
+function findOrder(id) { return prep.orders.find(o => o.id === id); }
+function findProduct(id) { return prep.products.find(p => p.id === id); }
+
+// ---------- 分頁 ----------
+let currentTab = 'list', detailId = null, editMode = false, hideDone = false;
+function switchTab(tab) {
+    currentTab = tab;
+    if (tab !== 'detail') { detailId = null; editMode = false; }
+    ['list', 'archive', 'settings', 'detail'].forEach(t => $('tab-' + t).classList.toggle('hidden', t !== tab));
+    $('tabs').classList.toggle('hidden', tab === 'detail');
+    $('fab').classList.toggle('hidden', tab !== 'list');
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        const on = b.dataset.tab === tab;
+        b.classList.toggle('border-amber-400', on); b.classList.toggle('text-white', on);
+        b.classList.toggle('border-transparent', !on); b.classList.toggle('text-slate-400', !on);
+    });
+    renderAll();
+    window.scrollTo(0, 0);
+}
+
+// 編輯中的輸入框有焦點時，雲端更新先不重畫，避免打字打到一半被洗掉
+let renderPending = false;
+function renderAll() {
+    const a = document.activeElement;
+    if (a && a.matches('input, textarea, select') && a.closest('#tab-detail, #modal')) { renderPending = true; return; }
+    renderPending = false;
+    if (currentTab === 'list') renderList();
+    if (currentTab === 'archive') renderArchive();
+    if (currentTab === 'settings') renderSettings();
+    if (currentTab === 'detail') renderDetail();
+    if (!$('modal').classList.contains('hidden') && window._modalRefresh) window._modalRefresh();
+}
+window.renderAll = renderAll;
+document.addEventListener('focusout', () => setTimeout(() => { if (renderPending) renderAll(); }, 50));
+
+// ---------- 備貨中 ----------
+function orderCard(o) {
+    const s = PREP.stats(o);
+    const pct = s.qty ? Math.round(s.picked / s.qty * 100) : 0;
+    const state = s.over ? 'border-red-400' : s.complete ? 'border-emerald-400' : s.picked ? 'border-amber-300' : 'border-slate-200';
+    return `<button onclick="openDetail('${o.id}')" class="w-full text-left bg-white rounded-2xl border-2 ${state} p-4 active:bg-slate-50">
+        <div class="flex items-baseline justify-between gap-2">
+            <div class="font-bold text-lg text-slate-800">${esc(o.customer)}</div>
+            <div class="text-sm text-slate-500 shrink-0">${esc(dateLabel(o.shipDate))}</div>
+        </div>
+        <div class="h-2 bg-slate-100 rounded-full mt-3 overflow-hidden"><div class="h-full ${s.complete ? 'bg-emerald-500' : 'bg-amber-400'}" style="width:${pct}%"></div></div>
+        <div class="flex justify-between text-sm mt-1.5 text-slate-600">
+            <span>${s.lines ? `已齊 ${s.done}/${s.lines} 行` : '<span class="text-slate-400">還沒加品項</span>'}</span>
+            <span>${s.picked}/${s.qty} 件${s.over ? `<span class="text-red-600 font-bold">｜超過 ${s.over} 行</span>` : ''}${s.complete ? '<span class="text-emerald-600 font-bold">｜備齊</span>' : ''}</span>
+        </div>
+    </button>`;
+}
+function renderList() {
+    const today = todayLocal();
+    const open = prep.orders.filter(o => !PREP.isArchived(o, today))
+        .sort((a, b) => (a.shipDate || '9').localeCompare(b.shipDate || '9') || (a.customer || '').localeCompare(b.customer || '', 'zh-Hant'));
+    if (!open.length) { $('order-list').innerHTML = '<div class="text-center text-slate-400 py-16">目前沒有要備的貨<br><span class="text-sm">按右下角「新增備貨單」開始</span></div>'; return; }
+    let html = '', last = null;
+    open.forEach(o => {
+        if (o.shipDate !== last) { last = o.shipDate; html += `<div class="text-xs font-bold text-slate-500 pt-2">${esc(dateLabel(o.shipDate))} 出貨</div>`; }
+        html += orderCard(o);
+    });
+    $('order-list').innerHTML = html;
+}
+
+// ---------- 封存 ----------
+function renderArchive() {
+    const today = todayLocal();
+    const arc = prep.orders.filter(o => PREP.isArchived(o, today))
+        .sort((a, b) => (b.shipDate || '').localeCompare(a.shipDate || ''));
+    $('archive-list').innerHTML = arc.length ? arc.map(o => {
+        const s = PREP.stats(o);
+        const tag = o.status === 'shipped' ? '<span class="text-emerald-700">已出貨</span>' : '<span class="text-amber-700">逾期自動封存</span>';
+        return `<button onclick="openDetail('${o.id}')" class="w-full text-left bg-white rounded-xl border border-slate-200 px-4 py-3 flex justify-between gap-2">
+            <span><b class="text-slate-800">${esc(o.customer)}</b> <span class="text-sm text-slate-500">${esc(o.shipDate || '')}</span></span>
+            <span class="text-sm shrink-0">${s.picked}/${s.qty} 件・${tag}</span></button>`;
+    }).join('') : '<div class="text-center text-slate-400 py-10">沒有封存的單</div>';
+}
+
+// ---------- 新增備貨單 ----------
+function customerOptions(sel) {
+    return prep.customers.map(c => `<option ${c.name === sel ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+}
+function openNewOrder() {
+    window._modalRefresh = null;
+    openModal(`<h3 class="font-bold text-lg mb-3">新增備貨單</h3>
+        <label class="text-xs text-slate-600">客戶</label>
+        <select id="no-customer" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 mb-1">
+            <option value="">— 選擇客戶 —</option>${customerOptions()}<option value="__new">＋ 新客戶…</option></select>
+        <input id="no-new" placeholder="新客戶名稱" class="hidden w-full border border-slate-300 rounded-xl px-3 py-2.5 mb-1">
+        <label class="text-xs text-slate-600 mt-2 block">出貨日期</label>
+        <input id="no-date" type="date" value="${todayLocal(1)}" class="w-full border border-slate-300 rounded-xl px-3 py-2.5">
+        <div class="flex gap-2 mt-5"><button onclick="closeModal()" class="flex-1 py-3 rounded-xl bg-slate-100">取消</button>
+        <button onclick="submitNewOrder()" class="flex-1 py-3 rounded-xl bg-blue-600 text-white font-medium">建立並加品項</button></div>`);
+    $('no-customer').onchange = e => $('no-new').classList.toggle('hidden', e.target.value !== '__new');
+}
+function submitNewOrder() {
+    let name = $('no-customer').value;
+    if (name === '__new') {
+        name = $('no-new').value.trim();
+        if (!name) return toast('請輸入客戶名稱');
+        if (!prep.customers.some(c => c.name === name)) api.addCustomer(name);
+    }
+    if (!name) return toast('請選擇客戶');
+    const date = $('no-date').value;
+    // 同客戶同一天已經有單：直接打開那張，追加的品項合併進去
+    const ex = prep.orders.find(o => o.customer === name && o.shipDate === date && !PREP.isArchived(o, todayLocal()));
+    closeModal();
+    if (ex) { toast('這個客戶當天已經有單，直接打開追加'); openDetail(ex.id, true); return; }
+    const id = api.createOrder(name, date);
+    window._justCreated = id;
+    openDetail(id, true);
+}
+
+// ---------- 單子內容 ----------
+function openDetail(id, edit = false) { detailId = id; editMode = edit; currentTab = 'detail'; switchTab('detail'); }
+
+function lineRow(o, l) {
+    const st = PREP.lineState(l);
+    const picked = Number(l.picked) || 0, qty = Number(l.qty) || 0;
+    const color = l.color ? `<span class="inline-block min-w-[3.5rem] text-center bg-slate-800 text-white rounded-lg px-2 py-1 text-base font-bold">${esc(l.color)}</span>` : '<span class="text-sm text-slate-500">不分色</span>';
+    if (editMode) {
+        return `<div class="line rounded-xl bg-white p-2.5 flex items-center gap-2">
+            ${color}
+            <span class="text-sm text-slate-500 ml-auto">單上</span>
+            <input type="number" inputmode="numeric" min="0" value="${qty}" onchange="editQty('${l.id}', this.value)" class="w-20 border border-slate-300 rounded-lg px-2 py-2 text-center font-bold">
+            <span class="text-sm text-slate-500">件</span>
+            <button onclick="removeLine('${l.id}')" class="w-10 h-10 rounded-lg bg-red-50 text-red-600"><i class="fa-solid fa-trash-can"></i></button>
+        </div>`;
+    }
+    return `<div class="line ${st} rounded-xl bg-white p-2.5">
+        <div class="flex items-center justify-between mb-2">${color}
+            ${st === 'over' ? `<span class="text-sm font-bold text-red-600"><i class="fa-solid fa-triangle-exclamation mr-1"></i>超過 ${picked - qty} 件</span>` : ''}</div>
+        <div class="flex items-center gap-2">
+            <button onclick="bump('${l.id}',-1)" class="pick-btn bg-slate-200 text-slate-800">−</button>
+            <button onclick="inputPicked('${l.id}')" class="cnt flex-1 rounded-xl border-2 border-slate-300 bg-white text-2xl font-bold">${picked}<span class="text-base font-normal text-slate-500"> / ${qty} 件</span></button>
+            <button onclick="bump('${l.id}',1)" class="pick-btn bg-slate-900 text-white">＋</button>
+            <button onclick="fillLine('${l.id}')" class="btn-full h-[54px] px-3 rounded-xl bg-emerald-600 text-white font-medium shrink-0">全到</button>
+        </div>
+    </div>`;
+}
+
+function renderDetail() {
+    const o = findOrder(detailId);
+    const el = $('tab-detail');
+    if (!o && detailId === window._justCreated) { el.innerHTML = '<div class="text-center py-16 text-slate-500"><i class="fa-solid fa-spinner fa-spin mr-2"></i>建立中…</div>'; return; }
+    if (!o) { el.innerHTML = `<div class="text-center py-16 text-slate-500">找不到這張單（可能已被刪除）<br><button onclick="switchTab('list')" class="mt-4 px-4 py-2 rounded-xl bg-slate-900 text-white">回列表</button></div>`; return; }
+    const s = PREP.stats(o);
+    const archived = PREP.isArchived(o, todayLocal());
+    const pct = s.qty ? Math.round(s.picked / s.qty * 100) : 0;
+    const groups = PREP.groupByProduct(o);
+
+    let html = `<div class="sticky top-0 z-20 -mx-3 px-3 pt-1 pb-3 bg-slate-100">
+        <div class="flex items-center gap-2">
+            <button onclick="switchTab('${archived ? 'archive' : 'list'}')" class="w-10 h-10 rounded-xl bg-white border border-slate-200"><i class="fa-solid fa-arrow-left"></i></button>
+            <div class="flex-1 min-w-0">
+                <div class="font-bold text-lg truncate">${esc(o.customer)}</div>
+                <div class="text-xs text-slate-500">${esc(dateLabel(o.shipDate))} 出貨${o.status === 'shipped' ? '・<b class="text-emerald-700">已出貨</b>' : archived ? '・<b class="text-amber-700">逾期自動封存</b>' : ''}</div>
+            </div>
+            <button onclick="toggleEdit()" class="px-3 h-10 rounded-xl ${editMode ? 'bg-amber-500 text-white' : 'bg-white border border-slate-200'} text-sm font-medium">${editMode ? '<i class="fa-solid fa-check mr-1"></i>編輯完成' : '<i class="fa-solid fa-pen mr-1"></i>編輯'}</button>
+        </div>
+        <div class="h-2 bg-slate-300 rounded-full mt-3 overflow-hidden"><div class="h-full ${s.complete ? 'bg-emerald-500' : 'bg-amber-400'}" style="width:${pct}%"></div></div>
+        <div class="flex justify-between text-sm mt-1"><span>已齊 ${s.done}/${s.lines} 行</span><span>${s.picked}/${s.qty} 件${s.over ? `<b class="text-red-600">｜超過 ${s.over} 行</b>` : ''}</span></div>
+        ${editMode ? '' : `<div class="flex gap-2 mt-2">
+            <button onclick="toggleHide()" class="flex-1 py-2.5 rounded-xl text-sm ${hideDone ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200'}">隱藏已齊</button>
+            <button onclick="openSummary()" class="flex-1 py-2.5 rounded-xl text-sm bg-blue-600 text-white"><i class="fa-solid fa-list-check mr-1"></i>總表</button>
+            ${o.status === 'shipped'
+                ? `<button onclick="setShipped(false)" class="flex-1 py-2.5 rounded-xl text-sm bg-white border border-slate-200">取消已出貨</button>`
+                : `<button onclick="setShipped(true)" class="flex-1 py-2.5 rounded-xl text-sm bg-emerald-600 text-white"><i class="fa-solid fa-truck mr-1"></i>已出貨</button>`}
+        </div>`}
+    </div>`;
+
+    if (editMode) {
+        html += `<div class="bg-white rounded-2xl border border-slate-200 p-3 mb-3 space-y-2">
+            <div class="grid grid-cols-2 gap-2">
+                <div><label class="text-xs text-slate-500">客戶</label>
+                    <select onchange="changeCustomer(this.value)" class="w-full border border-slate-300 rounded-lg px-2 py-2">${prep.customers.some(c => c.name === o.customer) ? '' : `<option selected>${esc(o.customer)}</option>`}${customerOptions(o.customer)}</select></div>
+                <div><label class="text-xs text-slate-500">出貨日期</label>
+                    <input type="date" value="${esc(o.shipDate || '')}" onchange="changeDate(this.value)" class="w-full border border-slate-300 rounded-lg px-2 py-2"></div>
+            </div>
+            <button onclick="openAddItem()" class="w-full py-3 rounded-xl bg-blue-600 text-white font-medium"><i class="fa-solid fa-plus mr-1"></i>加品項</button>
+        </div>`;
+    }
+
+    if (!groups.length) {
+        html += `<div class="text-center text-slate-400 py-10">還沒有品項${editMode ? '' : '<br><button onclick="toggleEdit()" class="mt-3 px-4 py-2 rounded-xl bg-blue-600 text-white">開始加品項</button>'}</div>`;
+    }
+    html += `<div class="${hideDone && !editMode ? 'hide-done' : ''} space-y-3">` + groups.map(g => `
+        <div class="prod-block ${g.allDone ? 'all-done' : ''} bg-slate-200/60 rounded-2xl p-2.5">
+            <div class="flex items-baseline justify-between px-1 mb-2">
+                <div class="font-bold text-slate-900 text-[17px]">${esc(g.name)}</div>
+                <div class="text-xs text-slate-500 font-mono">${esc(g.shipCode || '')}</div>
+            </div>
+            <div class="space-y-2">${g.lines.map(l => lineRow(o, l)).join('')}</div>
+            ${g.lines.length > 1 ? `<div class="text-right text-xs text-slate-500 mt-1.5 px-1">小計 ${g.picked}/${g.qty} 件</div>` : ''}
+        </div>`).join('') + '</div>';
+
+    if (editMode) {
+        html += `<div class="mt-8 text-center"><button onclick="deleteOrder()" class="text-sm text-red-600 underline">刪除整張備貨單</button></div>`;
+    }
+    el.innerHTML = html;
+}
+
+function cur() { return findOrder(detailId); }
+function lineOf(lid) { return PREP.lines(cur()).find(l => l.id === lid); }
+function bump(lid, d) { const l = lineOf(lid); if (!l) return; if (d < 0 && (Number(l.picked) || 0) <= 0) return; api.bumpPicked(detailId, lid, d); }
+function fillLine(lid) { const l = lineOf(lid); if (l) api.setPicked(detailId, lid, Number(l.qty) || 0); }
+function inputPicked(lid) {
+    const l = lineOf(lid); if (!l) return;
+    const v = prompt(`${l.name}${l.color ? '　' + l.color : ''}\n單上 ${l.qty} 件，目前搬了幾件？`, l.picked || '');
+    if (v === null) return;
+    const n = toInt(v); if (!(n >= 0)) return toast('請輸入 0 以上的數字');
+    api.setPicked(detailId, lid, n);
+}
+function editQty(lid, v) {
+    const n = toInt(v); if (!(n >= 0)) return toast('件數要是 0 以上的數字');
+    api.setQty(detailId, lid, n);
+}
+function removeLine(lid) { const l = lineOf(lid); if (l && confirm(`刪除「${l.name}${l.color ? ' ' + l.color : ''}」這一行？`)) api.removeLine(detailId, lid); }
+function toggleEdit() { editMode = !editMode; renderDetail(); }
+function toggleHide() { hideDone = !hideDone; renderDetail(); }
+function changeDate(v) { if (v) api.updateOrder(detailId, { shipDate: v }); }
+function changeCustomer(v) { if (v) api.updateOrder(detailId, { customer: v }); }
+function setShipped(v) {
+    const o = cur(), s = PREP.stats(o);
+    if (v && !s.complete && !confirm(`還有 ${s.lines - s.done} 行沒對齊（缺或多），確定標成已出貨？\n（標了之後會移到封存，有扣貨的照最後搬的件數打單）`)) return;
+    api.setShipped(detailId, v);
+    toast(v ? '已出貨，移到封存' : '已取消出貨，回到備貨中');
+    if (v) switchTab('list');
+}
+function deleteOrder() {
+    const o = cur();
+    if (!confirm(`確定刪除「${o.customer}」${o.shipDate || ''} 的備貨單？刪了就找不回來。`)) return;
+    api.deleteOrder(detailId); switchTab('list'); toast('已刪除');
+}
+
+// ---------- 總表（打單用＋缺件） ----------
+function openSummary() {
+    const o = cur();
+    const gs = PREP.groupByProduct(o);
+    const short = PREP.lines(o).filter(l => (Number(l.picked) || 0) < (Number(l.qty) || 0));
+    const over = PREP.lines(o).filter(l => (Number(l.picked) || 0) > (Number(l.qty) || 0));
+    window._modalRefresh = openSummary;
+    openModal(`<h3 class="font-bold text-lg">${esc(o.customer)} 總表</h3>
+        <div class="text-xs text-slate-500 mb-3">${esc(o.shipDate || '')} 出貨・打單用的是「實際搬的件數」，顏色已加總</div>
+        <table class="w-full text-sm"><tr class="text-left text-slate-500 border-b"><th class="py-1.5">品項</th><th class="text-right">搬了</th><th class="text-right">單上</th></tr>
+        ${gs.map(g => `<tr class="border-b border-slate-100"><td class="py-1.5"><div class="font-medium">${esc(g.name)}</div><div class="text-xs text-slate-500 font-mono">${esc(g.shipCode || '—')}</div></td>
+            <td class="text-right font-bold ${g.picked !== g.qty ? (g.picked > g.qty ? 'text-red-600' : 'text-amber-600') : ''}">${g.picked}</td><td class="text-right text-slate-500">${g.qty}</td></tr>`).join('')}
+        <tr class="font-bold"><td class="py-2">合計</td><td class="text-right">${gs.reduce((a, g) => a + g.picked, 0)}</td><td class="text-right text-slate-500">${gs.reduce((a, g) => a + g.qty, 0)}</td></tr></table>
+        ${short.length ? `<div class="mt-4 text-sm font-bold text-amber-700">缺件 ${short.length} 行</div><ul class="text-sm">${short.map(l => `<li>${esc(l.name)} ${esc(l.color)}：${l.picked || 0}/${l.qty}，差 ${l.qty - (l.picked || 0)} 件</li>`).join('')}</ul>` : ''}
+        ${over.length ? `<div class="mt-3 text-sm font-bold text-red-600">超過 ${over.length} 行</div><ul class="text-sm">${over.map(l => `<li>${esc(l.name)} ${esc(l.color)}：${l.picked}/${l.qty}，多 ${l.picked - l.qty} 件</li>`).join('')}</ul>` : ''}
+        <div class="flex gap-2 mt-5"><button onclick="copySummary()" id="copy-btn" class="flex-1 py-3 rounded-xl bg-slate-100">複製文字</button>
+        <button onclick="closeModal()" class="flex-1 py-3 rounded-xl bg-slate-900 text-white">關閉</button></div>`);
+}
+function copySummary() {
+    const s = PREP.summaryText(cur());
+    const ok = () => { $('copy-btn').textContent = '已複製 ✓'; };
+    if (navigator.clipboard) navigator.clipboard.writeText(s).then(ok, () => prompt('請手動複製', s)); else prompt('請手動複製', s);
+}
+
+// ---------- 加品項 ----------
+let addQuery = '', addPick = null;
+function openAddItem() { addQuery = ''; addPick = null; window._modalRefresh = null; renderAddItem(); }
+function renderAddItem() {
+    if (addPick) return renderAddColors();
+    const q = addQuery.trim().toLowerCase();
+    const list = prep.products.filter(p => !q || `${p.shipCode || ''} ${p.code || ''} ${p.name || ''}`.toLowerCase().includes(q)).slice(0, 60);
+    openModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-bold text-lg">加品項</h3><button onclick="closeModal()" class="text-slate-400 text-xl px-2">✕</button></div>
+        <input id="add-q" value="${esc(addQuery)}" placeholder="搜尋 出貨編號／品名" autocomplete="off" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 mb-2">
+        <div id="add-results" class="divide-y divide-slate-100 border border-slate-200 rounded-xl max-h-[50vh] overflow-y-auto">
+        ${list.length ? list.map(p => `<button onclick="pickProduct('${p.id}')" class="w-full text-left px-3 py-2.5 active:bg-slate-50 flex justify-between gap-2">
+            <span><span class="font-medium">${esc(p.name)}</span><br><span class="text-xs text-slate-500 font-mono">${esc(p.shipCode || '（未填出貨編號）')}</span></span>
+            <span class="text-xs text-slate-500 text-right shrink-0">${(p.colors || []).length ? esc(p.colors.join('、')) : '<span class="text-amber-600">未設顏色</span>'}</span></button>`).join('')
+            : '<div class="px-3 py-6 text-center text-slate-400 text-sm">找不到符合的產品</div>'}
+        </div>
+        <button onclick="openNewProduct()" class="need-editor w-full mt-3 py-2.5 rounded-xl border border-dashed border-slate-400 text-slate-600 text-sm"><i class="fa-solid fa-plus mr-1"></i>找不到？新增產品</button>
+        ${canEdit() ? '' : '<p class="text-xs text-slate-500 mt-3 text-center">找不到產品的話，請管理者或技術員新增。</p>'}`);
+    const inp = $('add-q');
+    inp.oninput = e => { addQuery = e.target.value; const pos = e.target.selectionStart; renderAddItem(); const n = $('add-q'); n.focus(); n.setSelectionRange(pos, pos); };
+}
+function pickProduct(id) { addPick = id; renderAddColors(); }
+function renderAddColors() {
+    const p = findProduct(addPick), o = cur();
+    if (!p || !o) { addPick = null; return renderAddItem(); }
+    const colors = (p.colors || []).length ? p.colors : [''];
+    openModal(`<div class="flex items-center gap-2 mb-1"><button onclick="addPick=null;renderAddItem()" class="w-9 h-9 rounded-lg bg-slate-100"><i class="fa-solid fa-arrow-left"></i></button>
+        <div><div class="font-bold text-lg leading-tight">${esc(p.name)}</div><div class="text-xs text-slate-500 font-mono">${esc(p.shipCode || '')}</div></div></div>
+        <p class="text-xs text-slate-500 mb-3 mt-2">各顏色填件數，不用的留空。這張單已經有的顏色會把件數加上去。</p>
+        <div class="space-y-2">${colors.map((c, i) => {
+            const ex = PREP.findLine(o, p.id, c);
+            return `<div class="flex items-center gap-2">
+                <span class="w-24 shrink-0 ${c ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'} rounded-lg px-2 py-2 text-center font-bold">${esc(c || '不分色')}</span>
+                <input type="number" inputmode="numeric" min="0" data-color="${esc(c)}" class="add-qty flex-1 min-w-0 border border-slate-300 rounded-xl px-3 py-2.5 text-lg font-bold text-center" placeholder="0">
+                <span class="text-sm text-slate-500 w-20 shrink-0">${ex ? `已有 ${ex.qty} 件` : '件'}</span></div>`;
+        }).join('')}</div>
+        ${(p.colors || []).length ? '' : `<p class="text-xs text-amber-700 mt-3">這個產品還沒設定顏色。${canEdit() ? `<button onclick="openColorSetup('${p.id}')" class="underline">現在設定</button>` : '請管理者或技術員到 MES 產品裡設定。'}</p>`}
+        <div class="flex gap-2 mt-5"><button onclick="addPick=null;renderAddItem()" class="flex-1 py-3 rounded-xl bg-slate-100">換別的</button>
+        <button onclick="submitAddColors()" class="flex-1 py-3 rounded-xl bg-blue-600 text-white font-medium">加入這張單</button></div>`);
+    const first = document.querySelector('.add-qty'); if (first) first.focus();
+}
+function submitAddColors() {
+    const p = findProduct(addPick), o = cur();
+    const items = [];
+    for (const inp of document.querySelectorAll('.add-qty')) {
+        if (inp.value.trim() === '') continue;
+        const n = toInt(inp.value);
+        if (!(n > 0)) return toast('件數要是大於 0 的數字');
+        items.push({ color: inp.dataset.color, qty: n });
+    }
+    if (!items.length) return toast('至少填一個顏色的件數');
+    api.addItems(o, p, items);
+    toast(`已加入 ${p.name}（${items.reduce((a, x) => a + x.qty, 0)} 件）`);
+    addPick = null; addQuery = ''; renderAddItem();
+}
+
+function colorChecks(selected) {
+    const all = [...prep.colors, ...selected.filter(c => !prep.colors.includes(c))];
+    return all.length ? `<div class="flex flex-wrap gap-1.5">${all.map(c => `<label class="inline-flex items-center gap-1.5 border border-slate-300 rounded-lg px-2 py-1.5 text-sm"><input type="checkbox" class="np-color w-4 h-4" value="${esc(c)}" ${selected.includes(c) ? 'checked' : ''}>${esc(c)}</label>`).join('')}</div>`
+        : '<p class="text-xs text-slate-500">還沒有顏色名單，先到「設定」新增。</p>';
+}
+function openNewProduct() {
+    openModal(`<h3 class="font-bold text-lg mb-1">新增產品</h3>
+        <p class="text-xs text-slate-500 mb-3">會直接加進 MES 的產品清單。成型數據先放佔位值（週期 999），MES 會標「成型數據未填」提醒之後補。</p>
+        <label class="text-xs text-slate-600">出貨編號</label>
+        <input id="np-ship" value="${esc(/^[a-z]{2,4}-?\d/i.test(addQuery) ? addQuery.toUpperCase() : '')}" placeholder="例 XTF-001" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 mb-2">
+        <label class="text-xs text-slate-600">品名</label>
+        <input id="np-name" value="${esc(/^[a-z]{2,4}-?\d/i.test(addQuery) ? '' : addQuery)}" placeholder="例 如意盆4.5吋" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 mb-2">
+        <label class="text-xs text-slate-600 block mb-1">顏色</label>${colorChecks([])}
+        <div class="flex gap-2 mt-5"><button onclick="renderAddItem()" class="flex-1 py-3 rounded-xl bg-slate-100">取消</button>
+        <button onclick="submitNewProduct()" class="flex-1 py-3 rounded-xl bg-blue-600 text-white font-medium">新增並選用</button></div>`);
+}
+function submitNewProduct() {
+    const shipCode = $('np-ship').value.trim().toUpperCase(), name = $('np-name').value.trim();
+    if (!name) return toast('請輸入品名');
+    if (shipCode && prep.products.some(p => p.shipCode === shipCode || p.code === shipCode)) return toast(`編號 ${shipCode} 已經有產品在用`);
+    const colors = [...document.querySelectorAll('.np-color:checked')].map(x => x.value);
+    const p = api.createProduct({ shipCode, name, colors });
+    if (!findProduct(p.id)) prep.products.push(p);   // 雲端回來前先放進本地，才能馬上選用
+    addPick = p.id; renderAddColors();
+}
+function openColorSetup(pid) {
+    const p = findProduct(pid);
+    openModal(`<h3 class="font-bold text-lg mb-1">${esc(p.name)} 的顏色</h3><p class="text-xs text-slate-500 mb-3">存到 MES 產品資料，之後都會用這個設定。</p>
+        ${colorChecks(p.colors || [])}
+        <div class="flex gap-2 mt-5"><button onclick="renderAddColors()" class="flex-1 py-3 rounded-xl bg-slate-100">取消</button>
+        <button onclick="saveColorSetup('${pid}')" class="flex-1 py-3 rounded-xl bg-blue-600 text-white font-medium">儲存</button></div>`);
+}
+function saveColorSetup(pid) {
+    const colors = [...document.querySelectorAll('.np-color:checked')].map(x => x.value);
+    api.updateProductColors(pid, colors);
+    const p = findProduct(pid); if (p) p.colors = colors;
+    renderAddColors();
+}
+
+// ---------- 設定 ----------
+function renderSettings() {
+    $('customer-list').innerHTML = prep.customers.length ? prep.customers.map(c => `<div class="flex items-center justify-between px-3 py-2.5">
+        <span>${esc(c.name)}</span><button onclick="delCustomer('${c.id}')" class="text-red-500 px-2"><i class="fa-solid fa-trash-can"></i></button></div>`).join('')
+        : '<div class="px-3 py-4 text-sm text-slate-400">還沒有客戶</div>';
+    $('color-list').innerHTML = prep.colors.length ? prep.colors.map((c, i) => `<div class="flex items-center gap-2 px-3 py-2">
+        <span class="flex-1">${esc(c)}</span>
+        <button onclick="moveColor(${i},-1)" class="w-9 h-9 rounded-lg bg-slate-100 ${i === 0 ? 'invisible' : ''}"><i class="fa-solid fa-arrow-up"></i></button>
+        <button onclick="moveColor(${i},1)" class="w-9 h-9 rounded-lg bg-slate-100 ${i === prep.colors.length - 1 ? 'invisible' : ''}"><i class="fa-solid fa-arrow-down"></i></button>
+        <button onclick="delColor(${i})" class="w-9 h-9 rounded-lg text-red-500"><i class="fa-solid fa-trash-can"></i></button></div>`).join('')
+        : '<div class="px-3 py-4 text-sm text-slate-400">還沒有顏色</div>';
+    const ps = prep.products;
+    const noShip = ps.filter(p => !p.shipCode).length, noColor = ps.filter(p => !(p.colors || []).length).length;
+    $('product-setup').innerHTML = `MES 產品共 ${ps.length} 項：沒填出貨編號 <b>${noShip}</b> 項、沒設顏色 <b>${noColor}</b> 項。<br><span class="text-xs text-slate-500">到 <a href="index.html" class="text-blue-600 underline">MES 產品</a> 編輯補上。</span>`;
+}
+function addCustomer() {
+    const v = $('new-customer').value.trim(); if (!v) return;
+    if (prep.customers.some(c => c.name === v)) return toast('已經有這個客戶');
+    api.addCustomer(v); $('new-customer').value = '';
+}
+function delCustomer(id) {
+    const c = prep.customers.find(x => x.id === id);
+    if (confirm(`從名單刪除「${c.name}」？（已經建的備貨單不受影響）`)) api.deleteCustomer(id);
+}
+function addColor() {
+    const v = $('new-color').value.trim(); if (!v) return;
+    if (prep.colors.includes(v)) return toast('已經有這個顏色');
+    api.saveColors([...prep.colors, v]); $('new-color').value = '';
+}
+function delColor(i) {
+    const c = prep.colors[i];
+    const used = prep.products.filter(p => (p.colors || []).includes(c)).length;
+    if (!confirm(`從名單刪除「${c}」？${used ? `\n有 ${used} 個產品勾了這個顏色，產品上的設定會保留，只是之後新產品選不到。` : ''}`)) return;
+    api.saveColors(prep.colors.filter((_, j) => j !== i));
+}
+function moveColor(i, d) {
+    const l = [...prep.colors]; const j = i + d; if (j < 0 || j >= l.length) return;
+    [l[i], l[j]] = [l[j], l[i]]; api.saveColors(l);
+}
+switchTab('list');
+</script>
+</body>
+</html>

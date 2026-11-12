@@ -895,7 +895,7 @@
 
     <!-- 產品 Modal -->
     <div id="product-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 space-y-5">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 space-y-5 max-h-[92vh] overflow-y-auto">
             <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 id="modal-title" class="text-lg font-bold text-slate-800">新增產品與模具資料</h3>
                 <button onclick="closeProductModal()" class="text-slate-400 hover:text-slate-600 p-1">
@@ -915,6 +915,20 @@
                         <input type="text" id="prod-name" placeholder="如：ABS 感測器上蓋" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none">
                     </div>
                 </div>
+
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-3">
+                    <div class="text-xs font-semibold text-amber-800"><i class="fa-solid fa-truck-ramp-box mr-1"></i>備貨用（選填）</div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">出貨編號</label>
+                        <input type="text" id="prod-ship-code" placeholder="如：XTF-001（出貨單上的編號）" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">這個產品有哪些顏色</label>
+                        <div id="prod-colors" class="flex flex-wrap gap-1.5"></div>
+                        <p class="text-[11px] text-slate-500 mt-1">顏色名單在「備貨」頁的設定裡增減。</p>
+                    </div>
+                </div>
+                <p class="text-[11px] text-slate-500">還沒有成型數據的產品：週期時間先填 <b>999</b>，列表會標「成型數據未填」提醒你之後補。</p>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -1075,6 +1089,10 @@
             listen('machines', fs.doc(db, 'meta', 'machines'), snap => {
                 window.appData.machines = snap.exists() ? (snap.data().list || []) : [];
             });
+            // 備貨用的顏色名單（prepMeta/colors）。規則還沒貼上時讀不到，靜默略過，不影響 MES
+            unsubs.push(fs.onSnapshot(fs.doc(db, 'prepMeta', 'colors'), snap => {
+                window.appData.shipColors = snap.exists() ? (snap.data().list || []) : [];
+            }, err => { console.warn('顏色名單讀取失敗（請確認 Firestore 規則）', err.code); }));
             if (window.currentUser.role === 'admin') {
                 listen('members', fs.collection(db, 'members'), snap => {
                     window.membersData = snap.docs.map(d => ({ ...d.data(), email: d.id }));
@@ -1460,6 +1478,13 @@
             activeBtn.classList.add('border-blue-500', 'text-blue-400', 'bg-slate-900/50');
         }
 
+        // 週期 999 = 成型數據還沒填（先建起來給備貨用）
+        function moldBadge(p) { return Number(p.cycleTime) === 999 ? ' <span class="ml-1 align-middle bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-medium px-1.5 py-0.5 rounded">成型數據未填</span>' : ''; }
+        function shipInfo(p) {
+            if (!p.shipCode && !(p.colors || []).length) return '';
+            return `<div class="text-[11px] text-slate-500 mt-0.5">${p.shipCode ? `出貨 <span class="font-mono">${esc(p.shipCode)}</span>` : ''}${p.shipCode && (p.colors || []).length ? '・' : ''}${esc((p.colors || []).join('、'))}</div>`;
+        }
+
         function renderProducts() {
             const tbody = document.getElementById('product-table-body');
             tbody.innerHTML = '';
@@ -1478,8 +1503,8 @@
                 tr.className = 'hover:bg-slate-50/80 transition';
                 tr.innerHTML = `
                     <td class="py-3.5 px-4">
-                        <div class="font-bold text-slate-800">${esc(p.name)}</div>
-                        <div class="text-xs font-mono text-blue-600">${esc(p.code)}</div>
+                        <div class="font-bold text-slate-800">${esc(p.name)}${moldBadge(p)}</div>
+                        <div class="text-xs font-mono text-blue-600">${esc(p.code)}</div>${shipInfo(p)}
                     </td>
                     <td class="py-3.5 px-4">
                         <span class="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-xs font-medium border border-slate-200">${esc(p.material)}</span>
@@ -1511,8 +1536,8 @@
                     <div class="p-4 space-y-2">
                         <div class="flex items-start justify-between gap-2">
                             <div>
-                                <div class="font-bold text-slate-800 text-base">${esc(p.name)}</div>
-                                <div class="text-xs font-mono text-blue-600">${esc(p.code)}</div>
+                                <div class="font-bold text-slate-800 text-base">${esc(p.name)}${moldBadge(p)}</div>
+                                <div class="text-xs font-mono text-blue-600">${esc(p.code)}</div>${shipInfo(p)}
                             </div>
                             <span class="shrink-0 bg-slate-100 text-slate-700 px-2 py-1 rounded-md text-xs font-medium border border-slate-200">${esc(p.material)}</span>
                         </div>
@@ -1580,12 +1605,24 @@
                 document.getElementById('prod-part-weight').value = p.partWeight;
                 document.getElementById('prod-runner-weight').value = p.runnerWeight;
                 document.getElementById('prod-cycle-time').value = p.cycleTime;
+                document.getElementById('prod-ship-code').value = p.shipCode || '';
             } else {
                 title.textContent = '新增產品與模具資料';
                 document.getElementById('product-form').reset();
                 document.getElementById('prod-id').value = '';
             }
+            renderProductColorChips(productId ? (window.appData.products.find(x => x.id === productId)?.colors || []) : []);
             modal.classList.remove('hidden');
+        }
+
+        // 顏色勾選：名單來自備貨頁設定；產品上有、但名單已刪掉的顏色也照樣顯示，避免存檔時被默默拿掉
+        function renderProductColorChips(selected) {
+            const list = window.appData.shipColors || [];
+            const all = [...list, ...selected.filter(c => !list.includes(c))];
+            const box = document.getElementById('prod-colors');
+            box.innerHTML = all.length ? all.map(c => `<label class="inline-flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2 py-1 text-sm cursor-pointer">
+                <input type="checkbox" value="${esc(c)}" ${selected.includes(c) ? 'checked' : ''} class="w-4 h-4">${esc(c)}</label>`).join('')
+                : '<span class="text-xs text-slate-400">還沒有顏色名單（到備貨頁設定新增）</span>';
         }
 
         function closeProductModal() {
@@ -1619,7 +1656,9 @@
                 cavities: parseInt(document.getElementById('prod-cavities').value, 10) || 1,
                 partWeight: parseFloat(document.getElementById('prod-part-weight').value) || 0,
                 runnerWeight: parseFloat(document.getElementById('prod-runner-weight').value) || 0,
-                cycleTime: parseFloat(document.getElementById('prod-cycle-time').value) || 0
+                cycleTime: parseFloat(document.getElementById('prod-cycle-time').value) || 0,
+                shipCode: document.getElementById('prod-ship-code').value.trim().toUpperCase(),
+                colors: [...document.querySelectorAll('#prod-colors input:checked')].map(x => x.value)
             };
 
             if (!(product.cycleTime > 0) || !(product.partWeight > 0) || product.cavities < 1) {
@@ -1630,8 +1669,14 @@
                 showToast(`料號 ${product.code} 已存在`);
                 return;
             }
+            if (product.shipCode && window.appData.products.some(p => p.id !== id && p.shipCode === product.shipCode)) {
+                showToast(`出貨編號 ${product.shipCode} 已用在別的產品`);
+                return;
+            }
 
-            window.api.saveProduct(product);
+            // 保留這個表單沒有的欄位（例如備貨頁寫入的資料），不要整筆蓋掉
+            const old = window.appData.products.find(p => p.id === id) || {};
+            window.api.saveProduct({ ...old, ...product });
             if (!editId && !window.appData.sops[id]) {
                 window.api.saveSop(id, { ...DEFAULT_SOP });
             }
@@ -1726,7 +1771,8 @@
             todo.forEach((r, i) => {
                 const id = r.existingId || `p_${base}_${i}`;
                 if (!r.existingId && !window.appData.sops[id]) newIds.push(id);
-                products.push({ id, code: r.code, name: r.name, material: r.material, cavities: r.cavities,
+                const old = r.existingId ? (window.appData.products.find(p => p.id === r.existingId) || {}) : {};
+                products.push({ ...old, id, code: r.code, name: r.name, material: r.material, cavities: r.cavities,
                     partWeight: r.partWeight, runnerWeight: r.runnerWeight, cycleTime: r.cycleTime });
             });
             if (!confirm(`確定匯入？新增 ${newIds.length} 個、更新 ${products.length - newIds.length} 個產品。`)) return;
