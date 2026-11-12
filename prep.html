@@ -145,6 +145,23 @@
     <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl max-h-[92vh] overflow-y-auto p-5" id="modal-body"></div>
 </div>
 
+<!-- 點貨件數輸入：原生 dialog，取代 prompt()，手機會跳數字鍵盤 -->
+<dialog id="pick-dlg" class="rounded-2xl p-0 w-[min(92vw,24rem)] backdrop:bg-black/40" closedby="any">
+    <form method="dialog" class="p-5 space-y-4" onsubmit="return submitPicked(event)">
+        <div>
+            <div id="pick-name" class="text-lg font-bold"></div>
+            <div id="pick-hint" class="text-sm text-slate-500"></div>
+        </div>
+        <input id="pick-input" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done"
+            class="w-full rounded-xl border-2 border-slate-300 px-4 py-3 text-3xl font-bold text-center" aria-label="目前搬了幾件">
+        <div class="flex gap-2">
+            <button type="button" onclick="document.getElementById('pick-dlg').close()" class="flex-1 rounded-xl border border-slate-300 py-3">取消</button>
+            <button type="button" id="pick-fill" class="flex-1 rounded-xl border border-emerald-400 text-emerald-700 py-3">全到齊</button>
+            <button type="submit" class="flex-1 rounded-xl bg-blue-600 text-white py-3 font-bold">確定</button>
+        </div>
+    </form>
+</dialog>
+
 <div id="toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2.5 rounded-xl text-sm opacity-0 pointer-events-none transition-opacity duration-300 z-[70]"></div>
 
 <!-- ===================== 純計算（無 DOM，可單獨測試） ===================== -->
@@ -811,10 +828,22 @@ function bump(lid, d) { const l = lineOf(lid); if (!l) return; if (d < 0 && (Num
 function fillLine(lid) { const l = lineOf(lid); if (l) api.setPicked(detailId, lid, Number(l.qty) || 0); }
 function inputPicked(lid) {
     const l = lineOf(lid); if (!l) return;
-    const v = prompt(`${l.name}${l.color ? '　' + l.color : ''}\n單上 ${l.qty} 件，目前搬了幾件？`, l.picked || '');
-    if (v === null) return;
-    const n = toInt(v); if (!(n >= 0)) return toast('請輸入 0 以上的數字');
-    api.setPicked(detailId, lid, n);
+    const dlg = document.getElementById('pick-dlg'), input = document.getElementById('pick-input');
+    dlg.dataset.lid = lid;
+    document.getElementById('pick-name').textContent = `${l.name}${l.color ? '　' + l.color : ''}`;
+    document.getElementById('pick-hint').textContent = `單上 ${l.qty} 件，目前搬了幾件？`;
+    input.value = l.picked || '';
+    document.getElementById('pick-fill').onclick = () => { input.value = Number(l.qty) || 0; input.focus(); };
+    dlg.showModal();
+    input.focus(); input.select();
+}
+function submitPicked(e) {
+    const dlg = document.getElementById('pick-dlg');
+    const n = toInt(document.getElementById('pick-input').value);
+    if (!(n >= 0)) { e.preventDefault(); toast('請輸入 0 以上的數字'); return false; }
+    api.setPicked(detailId, dlg.dataset.lid, n);
+    dlg.close();
+    return false;
 }
 function editQty(lid, v) {
     const n = toInt(v); if (!(n >= 0)) return toast('件數要是 0 以上的數字');
