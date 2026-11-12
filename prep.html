@@ -119,6 +119,14 @@
             </div>
             <div id="color-list" class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100"></div>
         </div>
+        <div class="need-editor">
+            <h2 class="font-bold text-slate-800 mb-1">批次貼上出貨品項</h2>
+            <p class="text-xs text-slate-500 mb-2">一行一個品項：<b>出貨編號　品名　顏色</b>（顏色用「、」分開）。用 Tab 或空白隔開都可以。<br>
+            已經有這個出貨編號的產品 → 只更新顏色；MES 裡同品名但還沒填出貨編號的 → 補上出貨編號和顏色；都找不到 → 新增產品（成型數據先填週期 999）。<b>不會動到成型數據。</b></p>
+            <textarea id="bulk-ship" rows="6" placeholder="XTF-001	如意盆4.5吋	磚紅、黑色、白色" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-sm"></textarea>
+            <div id="bulk-ship-preview" class="mt-2"></div>
+            <button id="bulk-ship-btn" onclick="saveBulkShip()" disabled class="mt-2 w-full py-3 rounded-xl bg-blue-600 text-white font-medium disabled:opacity-40">匯入</button>
+        </div>
         <div>
             <h2 class="font-bold text-slate-800 mb-1">產品顏色設定進度</h2>
             <div id="product-setup" class="text-sm text-slate-600"></div>
@@ -201,7 +209,40 @@ const PREP = (() => {
     function findLine(order, productId, color) {
         return lines(order).find(l => l.productId === productId && (l.color || '') === (color || ''));
     }
-    return { ARCHIVE_AFTER_DAYS, daysBetween, lines, lineState, stats, groupByProduct, isArchived, summaryText, findLine };
+    // 批次出貨品項：每行 出貨編號 品名 顏色（顏色以 、,/ 分隔）
+    function parseShipBulk(text, products, knownColors) {
+        const byShip = new Map(products.filter(p => p.shipCode).map(p => [p.shipCode, p]));
+        const seen = new Map(), rows = [];
+        const splitColors = s => String(s || '').split(/[、,，/／+＋;；]/).map(x => x.trim()).filter(Boolean);
+        const isColorToken = s => /[、,，/／+＋;；]/.test(s) || knownColors.includes(s);
+        text.split(/\r?\n/).forEach((raw, i) => {
+            const line = raw.trim(); if (!line) return;
+            let code, name, colorStr;
+            if (line.includes('\t')) { [code, name, colorStr] = line.split('\t').map(x => x.trim()); }
+            else {
+                const tk = line.split(/\s+/);
+                code = tk.shift();
+                let j = tk.length; while (j > 1 && isColorToken(tk[j - 1])) j--;   // 尾巴是顏色的部分
+                name = tk.slice(0, j).join(' '); colorStr = tk.slice(j).join('、');
+            }
+            code = String(code || '').trim().toUpperCase();
+            if (/^(出貨)?編號|^no\.?$/i.test(code)) return;   // 標題列
+            const r = { line: i + 1, shipCode: code, name: String(name || '').trim(), colors: [...new Set(splitColors(colorStr))], errors: [] };
+            if (!/^[A-Z0-9][A-Z0-9-]*$/.test(r.shipCode)) r.errors.push('出貨編號格式不對');
+            if (!r.name) r.errors.push('沒有品名');
+            if (seen.has(r.shipCode)) r.errors.push(`跟第 ${seen.get(r.shipCode)} 行重複`); else seen.set(r.shipCode, r.line);
+            r.newColors = r.colors.filter(c => !knownColors.includes(c));
+            const ex = byShip.get(r.shipCode);
+            const byName = !ex ? products.filter(p => !p.shipCode && p.name === r.name) : [];
+            if (byName.length > 1) r.errors.push(`MES 有 ${byName.length} 個同名產品，請先到 MES 手動填出貨編號`);
+            r.target = ex || (byName.length === 1 ? byName[0] : null);
+            r.action = !r.target ? 'new' : ex ? 'update' : 'link';
+            if (r.action === 'update' && String((ex.colors || []).join('、')) === r.colors.join('、')) r.action = 'same';
+            rows.push(r);
+        });
+        return rows;
+    }
+    return { parseShipBulk, ARCHIVE_AFTER_DAYS, daysBetween, lines, lineState, stats, groupByProduct, isArchived, summaryText, findLine };
 })();
 window.prep = window.prep || { orders: [], customers: [], colors: [], products: [] };   // 雲端層（module）載入前先有空資料
 if (typeof module !== 'undefined') module.exports = PREP;
@@ -346,6 +387,15 @@ window.api = {
             material: '未填', cavities: 1, partWeight: 1, runnerWeight: 0, cycleTime: 999, ...stamp() };
         bg(fs.setDoc(fs.doc(db, 'products', id), p));
         return { ...p, id };
+    },
+    // 批次：已有的只改 shipCode／colors；新的建佔位產品。每批 400 筆以內
+    bulkShipItems(rows) {
+        const ops = rows.map((r, i) => b => {
+            if (r.target) b.update(fs.doc(db, 'products', r.target.id), { shipCode: r.shipCode, colors: r.colors, ...stamp() });
+            else b.set(fs.doc(db, 'products', `p_${Date.now()}_${i}`), { code: r.shipCode, name: r.name, shipCode: r.shipCode, colors: r.colors,
+                material: '未填', cavities: 1, partWeight: 1, runnerWeight: 0, cycleTime: 999, ...stamp() });
+        });
+        for (let i = 0; i < ops.length; i += 400) { const b = fs.writeBatch(db); ops.slice(i, i + 400).forEach(f => f(b)); bg(b.commit()); }
     },
     updateProductColors(id, colors) { bg(fs.updateDoc(fs.doc(db, 'products', id), { colors, ...stamp() })); }
 };
@@ -794,6 +844,36 @@ function renderSettings() {
     const noShip = ps.filter(p => !p.shipCode).length, noColor = ps.filter(p => !(p.colors || []).length).length;
     $('product-setup').innerHTML = `MES 產品共 ${ps.length} 項：沒填出貨編號 <b>${noShip}</b> 項、沒設顏色 <b>${noColor}</b> 項。<br><span class="text-xs text-slate-500">到 <a href="index.html" class="text-blue-600 underline">MES 產品</a> 編輯補上。</span>`;
 }
+let shipRows = [];
+function previewBulkShip() {
+    const el = $('bulk-ship'); if (!el) return;
+    shipRows = PREP.parseShipBulk(el.value, prep.products, prep.colors);
+    const cnt = k => shipRows.filter(r => !r.errors.length && r.action === k).length;
+    const bad = shipRows.filter(r => r.errors.length).length;
+    const newColors = [...new Set(shipRows.flatMap(r => r.newColors))];
+    const label = { new: '<span class="text-emerald-700">新增</span>', update: '<span class="text-amber-700">更新顏色</span>', link: '<span class="text-blue-700">對應 MES 品名</span>', same: '<span class="text-slate-400">沒變</span>' };
+    $('bulk-ship-preview').innerHTML = shipRows.length ? `<div class="text-sm font-medium mb-1">新增 ${cnt('new')}｜對應 ${cnt('link')}｜更新 ${cnt('update')}｜沒變 ${cnt('same')}｜<span class="${bad ? 'text-red-600' : ''}">有錯 ${bad}</span></div>
+        ${newColors.length ? `<div class="text-xs text-amber-700 mb-1">顏色名單沒有：${esc(newColors.join('、'))}（匯入時會自動加進名單，打錯字請先改）</div>` : ''}
+        <div class="max-h-64 overflow-y-auto border border-slate-200 rounded-xl bg-white"><table class="w-full text-xs">
+        ${shipRows.map(r => `<tr class="border-b border-slate-100 ${r.errors.length ? 'bg-red-50' : ''}"><td class="px-2 py-1 text-slate-400">${r.line}</td>
+            <td class="px-2 py-1">${r.errors.length ? `<span class="text-red-600 font-bold">✗ ${esc(r.errors.join('、'))}</span>` : label[r.action]}</td>
+            <td class="px-2 py-1 font-mono">${esc(r.shipCode)}</td><td class="px-2 py-1">${esc(r.name)}${r.action === 'update' && r.target.name !== r.name ? `<br><span class="text-slate-400">MES：${esc(r.target.name)}</span>` : ''}</td>
+            <td class="px-2 py-1">${esc(r.colors.join('、')) || '<span class="text-amber-600">無顏色</span>'}</td></tr>`).join('')}</table></div>` : '';
+    $('bulk-ship-btn').disabled = !shipRows.length || bad > 0 || !(cnt('new') + cnt('link') + cnt('update'));
+}
+function saveBulkShip() {
+    previewBulkShip();
+    const todo = shipRows.filter(r => !r.errors.length && r.action !== 'same');
+    if (!todo.length) return;
+    const newColors = [...new Set(todo.flatMap(r => r.newColors))];
+    if (!confirm(`確定匯入 ${todo.length} 個品項？${newColors.length ? `\n顏色名單會新增：${newColors.join('、')}` : ''}`)) return;
+    if (newColors.length) api.saveColors([...prep.colors, ...newColors]);
+    api.bulkShipItems(todo);
+    $('bulk-ship').value = ''; previewBulkShip();
+    toast(`已匯入 ${todo.length} 個品項`);
+}
+document.addEventListener('input', e => { if (e.target.id === 'bulk-ship') previewBulkShip(); });
+
 function addCustomer() {
     const v = $('new-customer').value.trim(); if (!v) return;
     if (prep.customers.some(c => c.name === v)) return toast('已經有這個客戶');
