@@ -272,7 +272,7 @@ const PREP = (() => {
             else { if (byShip.has(f[0].toUpperCase())) r.shipCode = f[0].toUpperCase(); else r.name = f[0]; cs = f[1]; }
             if (/^[-—]?$/.test(r.shipCode)) r.shipCode = '';
             cs.split(/[、,，;；]/).map(x => x.trim()).filter(Boolean).forEach(piece => {
-                const mm = piece.match(/^(.*?)\s*[×*:：]?\s*(\d+)\s*件?$/);
+                const mm = piece.match(/^(.*?)\s*[xX×*:：]?\s*(\d+)\s*件?$/);
                 if (!mm || !(+mm[2] > 0)) { r.errors.push(`「${piece}」看不出件數`); return; }
                 let color = mm[1].trim(); if (color === '不分色') color = '';
                 const ex = r.items.find(x => x.color === color);
