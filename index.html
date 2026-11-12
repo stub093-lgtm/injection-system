@@ -249,6 +249,16 @@
                 </div>
             </div>
 
+            <!-- 分類按鈕＋搜尋（依出貨編號前三碼分類） -->
+            <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-200/80 space-y-2.5">
+                <div class="relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input id="prod-search" type="search" oninput="renderProducts()" placeholder="搜尋品名、料號或出貨編號" class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-sm outline-none focus:border-blue-500">
+                </div>
+                <div id="prod-cats" class="flex gap-1.5 overflow-x-auto sm:flex-wrap pb-1 -mx-1 px-1"></div>
+                <div id="prod-count" class="text-xs text-slate-500"></div>
+            </div>
+
             <!-- 產品表格清單 -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
                 <div class="overflow-x-auto hidden sm:block">
@@ -1485,17 +1495,62 @@
             return `<div class="text-[11px] text-slate-500 mt-0.5">${p.shipCode ? `出貨 <span class="font-mono">${esc(p.shipCode)}</span>` : ''}${p.shipCode && (p.colors || []).length ? '・' : ''}${esc((p.colors || []).join('、'))}</div>`;
         }
 
+        // ==================== 產品分類（依出貨編號前三碼） ====================
+        // 名稱是照現有品名整理的，認不得的前綴只顯示代碼
+        const PROD_CAT_NAMES = {
+            XSA: '圓盆', XSB: '桶・吊盆', XSC: '圓底盤', XSD: '花槽', XSE: '歐洲盆・方盆', XSF: '扣環・套圈',
+            XSG: '端盤・育苗', XSH: '客製・其他', XSI: '六角・仿瓷', XSJ: '防草墊',
+            XTA: '長花槽', XTB: '仿陶', XTC: '素陶', XTD: '彩陶', XTE: '靚盆', XTF: '如意', XTG: '菜園・育苗', XTH: '彩方', XTI: '穩優'
+        };
+        const NO_SHIP = '_none', UNFILLED = '_unfilled';
+        let prodCat = (() => { try { return localStorage.getItem('mes_prod_cat') || 'all'; } catch (e) { return 'all'; } })();
+        function prodCatOf(p) {
+            const m = String(p.shipCode || '').toUpperCase().match(/^[A-Z]{1,3}/);
+            return m ? m[0] : NO_SHIP;
+        }
+        function prodSortKey(p) { return String(p.shipCode || '~' + (p.code || '')); }   // 沒出貨編號的排最後
+        function setProdCat(c) {
+            prodCat = c;
+            try { localStorage.setItem('mes_prod_cat', c); } catch (e) {}
+            renderProducts();
+        }
+        function renderProdCats(all) {
+            const counts = new Map();
+            all.forEach(p => { const c = prodCatOf(p); counts.set(c, (counts.get(c) || 0) + 1); });
+            const unfilled = all.filter(p => Number(p.cycleTime) === 999).length;
+            const keys = [...counts.keys()].filter(k => k !== NO_SHIP).sort();
+            if (prodCat !== 'all' && prodCat !== UNFILLED && !counts.has(prodCat)) prodCat = 'all';
+            const chip = (key, label, n, extra = '') => {
+                const on = prodCat === key;
+                return `<button onclick="setProdCat('${key}')" class="shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium border transition ${on ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50 ' + extra}">${label} <span class="${on ? 'text-blue-100' : 'text-slate-400'}">${n}</span></button>`;
+            };
+            document.getElementById('prod-cats').innerHTML =
+                chip('all', '全部', all.length) +
+                keys.map(k => chip(k, `<span class="font-mono">${k}</span>${PROD_CAT_NAMES[k] ? ' ' + PROD_CAT_NAMES[k] : ''}`, counts.get(k))).join('') +
+                (counts.has(NO_SHIP) ? chip(NO_SHIP, '沒出貨編號', counts.get(NO_SHIP)) : '') +
+                (unfilled ? chip(UNFILLED, '成型數據未填', unfilled, 'text-amber-800 border-amber-300 bg-amber-50') : '');
+        }
+
         function renderProducts() {
             const tbody = document.getElementById('product-table-body');
             tbody.innerHTML = '';
             const cards = document.getElementById('product-cards');
             cards.innerHTML = '';
-            if (window.appData.products.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400 text-sm">尚無產品資料</td></tr>';
-                cards.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm">尚無產品資料</div>';
+            const all = window.appData.products;
+            renderProdCats(all);
+            const q = (document.getElementById('prod-search')?.value || '').trim().toLowerCase();
+            const shown = all.filter(p => {
+                if (prodCat === UNFILLED ? Number(p.cycleTime) !== 999 : prodCat !== 'all' && prodCatOf(p) !== prodCat) return false;
+                return !q || [p.name, p.code, p.shipCode].some(v => String(v || '').toLowerCase().includes(q));
+            }).sort((a, b) => prodSortKey(a).localeCompare(prodSortKey(b), 'zh-Hant', { numeric: true }));
+            document.getElementById('prod-count').textContent = all.length ? `顯示 ${shown.length} / ${all.length} 個產品` : '';
+            if (shown.length === 0) {
+                const msg = all.length ? '這個分類／搜尋沒有產品' : '尚無產品資料';
+                tbody.innerHTML = `<tr><td colspan="9" class="py-8 text-center text-slate-400 text-sm">${msg}</td></tr>`;
+                cards.innerHTML = `<div class="py-8 text-center text-slate-400 text-sm">${msg}</div>`;
             }
 
-            window.appData.products.forEach(p => {
+            shown.forEach(p => {
                 const totalShotWeight = (p.partWeight * p.cavities + p.runnerWeight).toFixed(1);
                 const hourlyOutput = Math.floor((3600 / p.cycleTime) * p.cavities);
 
