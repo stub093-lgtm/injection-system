@@ -62,6 +62,8 @@
         body:not([data-role="admin"]):not([data-role="editor"]) .need-editor { display: none !important; }
         body:not([data-role="admin"]):not([data-role="editor"]):not([data-role="operator"]) .need-member { display: none !important; }
         input[readonly], textarea[readonly] { background-color: #f8fafc !important; cursor: default; }
+        /* 實際值欄位：淺藍底，唯讀模式也保留，一眼分得出不是設定值 */
+        input.actual-val, input.actual-val[readonly] { background-color: #e0f2fe !important; }
 
         .no-scrollbar::-webkit-scrollbar {
             display: none;
@@ -433,8 +435,11 @@
                                 <i class="fa-solid fa-stopwatch text-blue-600"></i>
                                 <label for="sop-inj-time" class="text-xs font-bold text-blue-900">射出時間 (Injection Time - 秒 s)：</label>
                             </div>
-                            <div class="flex items-center space-x-2">
-                                <input type="number" step="0.01" id="sop-inj-time" placeholder="如: 1.8" class="w-32 bg-white border border-blue-300 rounded-lg px-3 py-1.5 text-sm font-bold text-blue-900 text-right focus:ring-2 focus:ring-blue-500 outline-none">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="text-xs font-semibold text-blue-700">設定</span>
+                                <input type="number" step="0.01" id="sop-inj-time" placeholder="如: 1.8" class="w-24 bg-white border border-blue-300 rounded-lg px-3 py-1.5 text-sm font-bold text-blue-900 text-right focus:ring-2 focus:ring-blue-500 outline-none">
+                                <label for="sop-inj-time-actual" class="text-xs font-semibold text-sky-800 ml-1">實際</label>
+                                <input type="number" step="0.01" min="0" id="sop-inj-time-actual" placeholder="選填" title="實際值：下模時抄機台面板上的數字" class="actual-val w-24 border-2 border-sky-400 rounded-lg px-3 py-1.5 text-sm font-bold text-sky-900 text-right focus:ring-2 focus:ring-sky-500 outline-none">
                                 <span class="text-xs font-semibold text-blue-700">秒 (s)</span>
                             </div>
                         </div>
@@ -473,6 +478,10 @@
                         <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
                             <label class="block text-xs text-slate-500 mb-1">計量行程 (mm)</label>
                             <input type="number" step="0.1" id="sop-metering-stroke" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800">
+                        </div>
+                        <div class="bg-sky-50 p-3 rounded-xl border-2 border-sky-300">
+                            <label for="sop-metering-time-actual" class="block text-xs font-bold text-sky-800 mb-1">加料時間・實際 (秒 s)</label>
+                            <input type="number" step="0.01" min="0" id="sop-metering-time-actual" placeholder="選填" title="實際值：下模時抄機台面板上的數字" class="actual-val w-full border-2 border-sky-400 rounded-lg px-2.5 py-1.5 text-sm font-bold text-sky-900 focus:ring-2 focus:ring-sky-500 outline-none">
                         </div>
                         <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
                             <label class="block text-xs text-slate-500 mb-1">鬆退距離 (mm)</label>
@@ -1458,9 +1467,9 @@
             ['sop-inj-p1', 'injP1'], ['sop-inj-p2', 'injP2'], ['sop-inj-p3', 'injP3'],
             ['sop-inj-s1', 'injS1'], ['sop-inj-s2', 'injS2'], ['sop-inj-s3', 'injS3'],
             ['sop-inj-pos1', 'injPos1'], ['sop-inj-pos2', 'injPos2'], ['sop-inj-pos3', 'injPos3'],
-            ['sop-inj-time', 'injTime'],
+            ['sop-inj-time', 'injTime'], ['sop-inj-time-actual', 'injTimeActual'],
             ['sop-hold-pressure', 'holdPressure'], ['sop-hold-time', 'holdTime'], ['sop-vp-switch', 'vpSwitch'],
-            ['sop-metering-stroke', 'meteringStroke'], ['sop-suck-back', 'suckBack'], ['sop-back-pressure', 'backPressure'],
+            ['sop-metering-stroke', 'meteringStroke'], ['sop-metering-time-actual', 'meteringTimeActual'], ['sop-suck-back', 'suckBack'], ['sop-back-pressure', 'backPressure'],
             ['sop-cooling-time', 'coolingTime'], ['sop-open-stroke', 'openStroke'],
             ['sop-eject-type', 'ejectType'], ['sop-ejector', 'ejector'], ['sop-chain-links', 'chainLinks'],
             ['sop-notes', 'notes']
@@ -1752,9 +1761,9 @@
             injP1: 70, injP2: 60, injP3: 45,
             injS1: 50, injS2: 60, injS3: 35,
             injPos1: 40, injPos2: 20, injPos3: 8,
-            injTime: 2.0,
+            injTime: 2.0, injTimeActual: null,
             holdPressure: 40, holdTime: 3.0, vpSwitch: 8,
-            meteringStroke: 50, suckBack: 2.5, backPressure: 6,
+            meteringStroke: 50, meteringTimeActual: null, suckBack: 2.5, backPressure: 6,
             coolingTime: 15, openStroke: 150, ejectType: '頂出', ejector: '35mm / 1次', chainLinks: null,
             notes: ''
         };
@@ -2007,9 +2016,9 @@
             tempNozzle: '射嘴溫度', tempZ1: '一段溫度', tempZ2: '二段溫度', tempZ3: '三段溫度', tempZ4: '四段溫度',
             tempMold: '模溫', dryTemp: '烘料溫度', dryTime: '烘料時間',
             injP1: '射壓1', injP2: '射壓2', injP3: '射壓3', injS1: '射速1', injS2: '射速2', injS3: '射速3',
-            injPos1: '位置1', injPos2: '位置2', injPos3: '位置3', injTime: '射出時間',
+            injPos1: '位置1', injPos2: '位置2', injPos3: '位置3', injTime: '射出時間', injTimeActual: '射出時間(實際)',
             holdPressure: '保壓壓力', holdTime: '保壓時間', vpSwitch: 'V/P 切換',
-            meteringStroke: '計量行程', suckBack: '鬆退', backPressure: '背壓',
+            meteringStroke: '計量行程', meteringTimeActual: '加料時間(實際)', suckBack: '鬆退', backPressure: '背壓',
             coolingTime: '冷卻時間', openStroke: '開模行程', ejectType: '脫模方式', ejector: '頂出', chainLinks: '拉鏈目數', notes: '備註'
         };
         let historyCache = [];
