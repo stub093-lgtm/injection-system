@@ -345,7 +345,7 @@ function handleUser(user) {
         auth.languageCode = 'zh-TW';
         db = fs.getFirestore(app);
         // MES 開在另一個分頁時會拿不到離線快取，屬正常，仍可線上使用
-        fs.enableIndexedDbPersistence(db).catch(e => console.warn('離線快取未啟用:', e.code));
+        fs.enableMultiTabIndexedDbPersistence(db).catch(e => console.warn('離線快取未啟用:', e.code));
         fa.onAuthStateChanged(auth, handleUser);
     } catch (e) {
         console.warn('Firebase 載入失敗', e);
