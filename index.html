@@ -306,7 +306,8 @@
         <section id="tab-sop" class="tab-content hidden space-y-6">
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
                 <div class="flex-1 max-w-xl">
-                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">選擇要查閱或設定成型條件的產品：</label>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">選擇要查閱或設定成型條件的產品： <span id="sop-product-count" class="font-normal normal-case text-slate-400"></span></label>
+                    <input type="search" id="sop-product-search" oninput="onProductSearch('sop-product-select')" placeholder="打品名幾個字搜尋，如：彩陶" autocomplete="off" class="w-full mb-1.5 bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                     <select id="sop-product-select" onchange="onSopProductChange()" class="w-full bg-slate-50 border border-slate-300 text-slate-800 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
                         <!-- 動態填入 -->
                     </select>
@@ -538,7 +539,7 @@
                     </div>
                     <div class="sm:col-span-2">
                         <label class="block text-xs font-semibold text-slate-600 mb-1">生產產品 <span id="log-product-count" class="font-normal text-slate-400"></span></label>
-                        <input type="search" id="log-product-search" oninput="onLogProductSearch()" placeholder="打品名幾個字搜尋，如：彩陶" autocomplete="off" class="w-full mb-1.5 bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="search" id="log-product-search" oninput="onProductSearch('log-product-select')" placeholder="打品名幾個字搜尋，如：彩陶" autocomplete="off" class="w-full mb-1.5 bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                         <select id="log-product-select" onchange="updateLogStandardPreview()" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                             <!-- 動態載入 -->
                         </select>
@@ -656,7 +657,8 @@
                         <p class="text-xs text-slate-500 mt-0.5">選產品，填你知道的那個數字，其他自動算。以標準週期計算，不含換模調機時間。</p>
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">產品</label>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">產品 <span id="calc-product-count" class="font-normal text-slate-400"></span></label>
+                        <input type="search" id="calc-product-search" oninput="onProductSearch('calc-product-select')" placeholder="打品名幾個字搜尋，如：彩陶" autocomplete="off" class="w-full mb-1.5 bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                         <select id="calc-product-select" onchange="runScheduleCalc()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"></select>
                         <div id="calc-info" class="text-xs text-slate-500 mt-1.5"></div>
                     </div>
@@ -762,7 +764,8 @@
                         <p class="text-xs text-slate-500 mt-0.5">報價扣掉原料（含料頭與損耗）後，每件還剩多少。</p>
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">產品</label>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">產品 <span id="quote-product-count" class="font-normal text-slate-400"></span></label>
+                        <input type="search" id="quote-product-search" oninput="onProductSearch('quote-product-select')" placeholder="打品名幾個字搜尋，如：彩陶" autocomplete="off" class="w-full mb-1.5 bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                         <select id="quote-product-select" onchange="runQuoteCalc()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-medium outline-none"></select>
                         <div id="quote-info" class="text-xs text-slate-500 mt-1.5"></div>
                     </div>
@@ -1622,23 +1625,7 @@
 
         // 只重建下拉選單；各模組的重算交給 refreshAllViews（原版這裡會重複算兩次）
         function populateProductDropdowns() {
-            const selects = ['sop-product-select', 'calc-product-select', 'quote-product-select'];
-            selects.forEach(selectId => {
-                const selectEl = document.getElementById(selectId);
-                const currentVal = selectEl.value;
-                selectEl.innerHTML = '';
-                window.appData.products.forEach(p => {
-                    const opt = document.createElement('option');
-                    opt.value = p.id;
-                    opt.textContent = `[${p.code}] ${p.name} (${p.cavities}穴 / ${p.cycleTime}s)`;
-                    selectEl.appendChild(opt);
-                });
-                if (currentVal && window.appData.products.some(p => p.id === currentVal)) {
-                    selectEl.value = currentVal;
-                }
-            });
-
-            renderLogProductOptions();
+            Object.keys(PRODUCT_SEARCH).forEach(renderSearchableProductSelect);
 
             const filterSelect = document.getElementById('filter-product');
             if (filterSelect) {
@@ -1654,23 +1641,43 @@
             }
         }
 
-        // 下模頁的產品選單：依搜尋框文字篩選（品名、料號、出貨編號；空白分隔多個關鍵字須全部符合）
-        function logProductMatches(p, words) {
+        // 可搜尋的產品選單：依搜尋框文字篩選（品名、料號、出貨編號；空白分隔多個關鍵字須全部符合）
+        // keepCurrent：成型條件頁打字時不可偷偷換掉目前產品（會跳過「未儲存」確認），所以目前產品一律留在選單最上面
+        const PRODUCT_SEARCH = {
+            'log-product-select':   { search: 'log-product-search',   count: 'log-product-count',   after: () => updateLogStandardPreview() },
+            'sop-product-select':   { search: 'sop-product-search',   count: 'sop-product-count',   keepCurrent: true },
+            'calc-product-select':  { search: 'calc-product-search',  count: 'calc-product-count',  after: () => runScheduleCalc() },
+            'quote-product-select': { search: 'quote-product-search', count: 'quote-product-count', after: () => runQuoteCalc() }
+        };
+
+        function productMatches(p, words) {
             const hay = `${p.name || ''} ${p.code || ''} ${p.shipCode || ''}`.toLowerCase();
             return words.every(w => hay.includes(w));
         }
 
-        function renderLogProductOptions() {
-            const selectEl = document.getElementById('log-product-select');
-            if (!selectEl) return;
-            const q = (document.getElementById('log-product-search')?.value || '').trim().toLowerCase();
+        function productOptionLabel(p) {
+            return `${p.name} [${p.code}] (${p.cavities}穴 / ${p.cycleTime}s)`;
+        }
+
+        function renderSearchableProductSelect(selectId) {
+            const cfg = PRODUCT_SEARCH[selectId];
+            const selectEl = document.getElementById(selectId);
+            if (!cfg || !selectEl) return;
+            const q = (document.getElementById(cfg.search)?.value || '').trim().toLowerCase();
             const words = q ? q.split(/\s+/) : [];
             const all = window.appData.products || [];
-            const list = words.length ? all.filter(p => logProductMatches(p, words)) : all;
+            const list = words.length ? all.filter(p => productMatches(p, words)) : all;
             const currentVal = selectEl.value;
+            const current = all.find(p => p.id === currentVal);
 
             selectEl.innerHTML = '';
-            if (!list.length) {
+            if (cfg.keepCurrent && current && !list.includes(current)) {
+                const opt = document.createElement('option');
+                opt.value = current.id;
+                opt.textContent = `（目前）${productOptionLabel(current)}`;
+                selectEl.appendChild(opt);
+            }
+            if (!list.length && !selectEl.options.length) {
                 const opt = document.createElement('option');
                 opt.value = '';
                 opt.textContent = all.length ? '找不到符合的產品，換個字試試' : '尚無產品資料';
@@ -1679,18 +1686,24 @@
             list.forEach(p => {
                 const opt = document.createElement('option');
                 opt.value = p.id;
-                opt.textContent = `${p.name} [${p.code}] (${p.cavities}穴 / ${p.cycleTime}s)`;
+                opt.textContent = productOptionLabel(p);
                 selectEl.appendChild(opt);
             });
-            if (currentVal && list.some(p => p.id === currentVal)) selectEl.value = currentVal;
+            if (current && [...selectEl.options].some(o => o.value === currentVal)) selectEl.value = currentVal;
 
-            const countEl = document.getElementById('log-product-count');
+            const countEl = document.getElementById(cfg.count);
             if (countEl) countEl.textContent = words.length ? `（符合 ${list.length} / ${all.length} 個）` : '';
         }
 
-        function onLogProductSearch() {
-            renderLogProductOptions();
-            updateLogStandardPreview();
+        function onProductSearch(selectId) {
+            renderSearchableProductSelect(selectId);
+            PRODUCT_SEARCH[selectId].after?.();
+        }
+
+        function clearProductSearch(selectId) {
+            const s = document.getElementById(PRODUCT_SEARCH[selectId].search);
+            if (s) s.value = '';
+            renderSearchableProductSelect(selectId);
         }
 
         function openProductModal(productId = null) {
@@ -1887,6 +1900,7 @@
 
         function viewProductSop(productId) {
             switchTab('tab-sop');
+            clearProductSearch('sop-product-select');
             document.getElementById('sop-product-select').value = productId;
             onSopProductChange();
         }
@@ -2103,8 +2117,7 @@
             document.getElementById('log-good-qty').value = '';
             document.getElementById('log-ng-qty').value = '0';
             document.getElementById('log-reason').value = '';
-            document.getElementById('log-product-search').value = '';
-            renderLogProductOptions();
+            clearProductSearch('log-product-select');
             showToast('產程結案紀錄已新增');
         }
 
