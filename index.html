@@ -1408,7 +1408,7 @@
                 auth.languageCode = 'zh-TW';   // 驗證信、重設密碼信用中文
                 db = fs.getFirestore(app);
                 // 離線寫入存在 IndexedDB，關閉頁面後重新上線仍會送出
-                fs.enableMultiTabIndexedDbPersistence(db).catch(err => console.warn('離線快取未啟用:', err.code));
+                fs.enableIndexedDbPersistence(db).catch(err => console.warn('離線快取未啟用:', err.code));
                 fa.onAuthStateChanged(auth, handleUser);
             } catch (e) {
                 console.warn('Firebase 載入失敗:', e);
