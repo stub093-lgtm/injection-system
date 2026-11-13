@@ -265,7 +265,11 @@ const PREP = (() => {
         else if ((mm = s.match(/^(\d{1,2})[\/\-.](\d{1,2})$/))) { y = Number(today.slice(0, 4)); m = +mm[1]; d = +mm[2]; }
         else return '';
         if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31)) return '';
-        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const iso = (yy) => `${yy}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const real = (yy) => { const t = new Date(Date.UTC(yy, m - 1, d)); return t.getUTCMonth() === m - 1 && t.getUTCDate() === d; };   // 擋 2/30 這種
+        // 沒寫年份：出貨日是未來的事。照今年算已經過了半年以上，就是指明年（12 月底打「1/5」）
+        if (mm.length === 3 && real(y + 1) && daysBetween(iso(y), today) > 180) y++;
+        return real(y) ? iso(y) : '';
     }
     // 整張備貨單文字：
     //   客戶：XXX ／ 出貨日期：2026/11/13
@@ -528,7 +532,7 @@ function handleUser(user) {
         auth = fa.getAuth(app);
         auth.languageCode = 'zh-TW';
         db = fs.getFirestore(app);
-        fs.enableIndexedDbPersistence(db).catch(e => console.warn('離線快取未啟用:', e.code));
+        fs.enableMultiTabIndexedDbPersistence(db).catch(e => console.warn('離線快取未啟用:', e.code));
         fa.onAuthStateChanged(auth, handleUser);
     } catch (e) {
         console.warn('Firebase 載入失敗', e);

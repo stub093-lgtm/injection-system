@@ -415,7 +415,7 @@ function handleUser(user) {
         const app = appMod.initializeApp(firebaseConfig);
         auth = fa.getAuth(app); auth.languageCode = 'zh-TW';
         db = fs.getFirestore(app);
-        fs.enableIndexedDbPersistence(db).catch(e => console.warn('離線快取未啟用:', e.code));
+        fs.enableMultiTabIndexedDbPersistence(db).catch(e => console.warn('離線快取未啟用:', e.code));
         fa.onAuthStateChanged(auth, handleUser);
     } catch (e) { console.warn(e); showScreen('offline'); }
 })();

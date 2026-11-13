@@ -1256,17 +1256,21 @@
 
             // 匯入備份（整份覆蓋）
             async importAll(data) {
+                // 順序：先寫入、最後才刪除。中途斷線時頂多是「多了舊資料」，不會變成「資料不見」
                 const ops = [];
                 const keepP = new Set(data.products.map(p => p.id));
                 const keepL = new Set(data.logs.map(l => l.id));
+                data.products.forEach(p => ops.push({ type: 'set', ref: fs.doc(db, 'products', p.id), data: stripId(p) }));
+                Object.entries(data.sops).forEach(([id, s]) => ops.push({ type: 'set', ref: fs.doc(db, 'sops', id), data: s }));
+                data.logs.forEach(l => ops.push({ type: 'set', ref: fs.doc(db, 'logs', l.id), data: stripId(l) }));
+                if (Array.isArray(data.machines) && data.machines.length) {
+                    ops.push({ type: 'set', ref: fs.doc(db, 'meta', 'machines'), data: { list: data.machines, ...stamp() } });
+                }
                 window.appData.products.filter(p => !keepP.has(p.id)).forEach(p => {
                     ops.push({ type: 'delete', ref: fs.doc(db, 'products', p.id) });
                     ops.push({ type: 'delete', ref: fs.doc(db, 'sops', p.id) });
                 });
                 window.appData.logs.filter(l => !keepL.has(l.id)).forEach(l => ops.push({ type: 'delete', ref: fs.doc(db, 'logs', l.id) }));
-                data.products.forEach(p => ops.push({ type: 'set', ref: fs.doc(db, 'products', p.id), data: stripId(p) }));
-                Object.entries(data.sops).forEach(([id, s]) => ops.push({ type: 'set', ref: fs.doc(db, 'sops', id), data: s }));
-                data.logs.forEach(l => ops.push({ type: 'set', ref: fs.doc(db, 'logs', l.id), data: stripId(l) }));
                 await commitInChunks(ops);
             },
 
@@ -1404,7 +1408,7 @@
                 auth.languageCode = 'zh-TW';   // 驗證信、重設密碼信用中文
                 db = fs.getFirestore(app);
                 // 離線寫入存在 IndexedDB，關閉頁面後重新上線仍會送出
-                fs.enableIndexedDbPersistence(db).catch(err => console.warn('離線快取未啟用:', err.code));
+                fs.enableMultiTabIndexedDbPersistence(db).catch(err => console.warn('離線快取未啟用:', err.code));
                 fa.onAuthStateChanged(auth, handleUser);
             } catch (e) {
                 console.warn('Firebase 載入失敗:', e);
@@ -1489,6 +1493,8 @@
         }
 
         // 週期 999 = 成型數據還沒填（先建起來給備貨用）
+        function isUnfilled(p) { return !!p && Number(p.cycleTime) === 999; }
+        const UNFILLED_WARN = '⚠ 這個產品的成型數據還沒填（週期 999 是佔位值），以下數字不能用。請先到「產品與模具資料」補上。';
         function moldBadge(p) { return Number(p.cycleTime) === 999 ? ' <span class="ml-1 align-middle bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-medium px-1.5 py-0.5 rounded">成型數據未填</span>' : ''; }
         function shipInfo(p) {
             if (!p.shipCode && !(p.colors || []).length) return '';
@@ -2013,6 +2019,10 @@
                 document.getElementById('log-std-preview').textContent = '-- pcs';
                 return;
             }
+            if (isUnfilled(product)) {
+                document.getElementById('log-std-preview').textContent = '成型數據未填';
+                return;
+            }
 
             const stdQty = Math.round((3600 / product.cycleTime) * product.cavities * hours);
             document.getElementById('log-std-preview').textContent = stdQty.toLocaleString() + ' pcs';
@@ -2023,6 +2033,8 @@
             const productId = document.getElementById('log-product-select').value;
             const product = window.appData.products.find(x => x.id === productId);
             if (!product) { showToast('請先選擇產品'); return; }
+            // 佔位值存進紀錄快照的話，這筆的標準量與達成率會永久錯誤
+            if (isUnfilled(product)) { showToast('這個產品的成型數據還沒填（週期 999），請先補上再記產程'); return; }
             const machine = (window.appData.machines || []).find(m => m.id === document.getElementById('log-machine').value);
             if (!machine) { showToast('請先選擇機台（管理者可在「1. 產品與模具資料」建立機台清單）'); return; }
             const newLog = {
@@ -2272,7 +2284,8 @@
             const loss = parseFloat(document.getElementById('calc-loss-rate').value) || 0;
             const daily = parseFloat(document.getElementById('calc-daily-hours').value) || 24;
             const shotW = p.partWeight * p.cavities + p.runnerWeight;
-            document.getElementById('calc-info').textContent = `${p.material} ・ ${p.cavities} 穴 ・ 週期 ${p.cycleTime}s ・ 每模 ${shotW.toFixed(1)}g`;
+            document.getElementById('calc-info').textContent = isUnfilled(p) ? UNFILLED_WARN : `${p.material} ・ ${p.cavities} 穴 ・ 週期 ${p.cycleTime}s ・ 每模 ${shotW.toFixed(1)}g`;
+            document.getElementById('calc-info').classList.toggle('text-rose-600', isUnfilled(p));
 
             let r, haveKg = null;
             if (calcMode === 'qty') {
@@ -2345,7 +2358,8 @@
             const remain = price - matPerPc;
             const goodPerHour = (3600 / p.cycleTime) * p.cavities / (1 + loss / 100);
 
-            document.getElementById('quote-info').textContent = `${p.material} ・ ${p.cavities} 穴 ・ 週期 ${p.cycleTime}s ・ 每模 ${shotW.toFixed(1)}g`;
+            document.getElementById('quote-info').textContent = isUnfilled(p) ? UNFILLED_WARN : `${p.material} ・ ${p.cavities} 穴 ・ 週期 ${p.cycleTime}s ・ 每模 ${shotW.toFixed(1)}g`;
+            document.getElementById('quote-info').classList.toggle('text-rose-600', isUnfilled(p));
             document.getElementById('q-price').textContent = money(price, 3);
             document.getElementById('q-mat').textContent = `− ${money(matPerPc, 3)}`;
             document.getElementById('q-mat-detail').textContent = `每件用料 ${gPerGood.toFixed(2)}g（含料頭、損耗 ${loss}%）× ${matPrice} 元/kg`;
@@ -2393,14 +2407,23 @@
                         return;
                     }
                     const logs = (Array.isArray(imported.logs) ? imported.logs : []).filter(l => l && l.id);
-                    // 匯入會整份覆蓋雲端資料，所有裝置都會受影響，必須確認
-                    if (!confirm(`匯入將「覆蓋」雲端上的全部資料（所有裝置同步生效）：\n產品 ${products.length} 項、產程紀錄 ${logs.length} 筆。\n\n建議先按「備份下載」保留目前資料。確定匯入？`)) return;
+                    // 離線時批次寫入會一直等不到回應，而且寫到一半最危險，直接擋掉
+                    if (!navigator.onLine) { showToast('目前離線，匯入備份需要網路連線'); return; }
+                    // 匯入會整份覆蓋雲端資料，所有裝置都會受影響，必須確認；明講會刪掉哪些
+                    const keepP = new Set(products.map(p => p.id)), keepL = new Set(logs.map(l => l.id));
+                    const goneP = window.appData.products.filter(p => !keepP.has(p.id));
+                    const goneL = window.appData.logs.filter(l => !keepL.has(l.id)).length;
+                    const goneTxt = (goneP.length || goneL)
+                        ? `\n\n⚠ 目前雲端有、備份檔裡沒有的資料會被「刪除」：\n產品 ${goneP.length} 項${goneP.length ? `（${goneP.slice(0, 5).map(p => p.shipCode || p.code).join('、')}${goneP.length > 5 ? '…' : ''}）` : ''}、產程紀錄 ${goneL} 筆。`
+                        : '';
+                    if (!confirm(`匯入將「覆蓋」雲端上的全部資料（所有裝置同步生效）：\n產品 ${products.length} 項、產程紀錄 ${logs.length} 筆。${goneTxt}\n\n建議先按「備份下載」保留目前資料。確定匯入？`)) return;
                     sopDirty = false;
                     showToast('匯入中，請勿關閉頁面…');
                     await window.api.importAll({
                         products,
                         sops: (imported.sops && typeof imported.sops === 'object') ? imported.sops : {},
-                        logs
+                        logs,
+                        machines: Array.isArray(imported.machines) ? imported.machines : []
                     });
                     showToast('備份資料已匯入');
                 } catch (err) {
