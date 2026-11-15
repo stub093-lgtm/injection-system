@@ -108,7 +108,15 @@
                 <input id="new-customer" placeholder="客戶名稱" class="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none">
                 <button onclick="addCustomer()" class="bg-slate-900 text-white px-4 rounded-xl text-sm"><i class="fa-solid fa-plus mr-1"></i>新增</button>
             </div>
-            <div id="customer-list" class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100"></div>
+            <div id="customer-list" class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100 max-h-80 overflow-y-auto"></div>
+        </div>
+        <div class="need-editor">
+            <h2 class="font-bold text-slate-800 mb-1">批次貼上客戶</h2>
+            <p class="text-xs text-slate-500 mb-2">一行一個客戶：<b>客戶名稱 | 常叫的出貨編號</b>（出貨編號用「、」分開，可以不填）。用 <b>|</b> 或 Tab 隔開。<br>
+            名單裡已經有的客戶 → 只更新常叫品項；沒有的 → 新增。<b>不會刪客戶，也不會動到已經建的備貨單。</b></p>
+            <textarea id="bulk-cust" rows="6" placeholder="翠筠 | XTF-001、XTF-002、XSA-012" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-sm"></textarea>
+            <div id="bulk-cust-preview" class="mt-2"></div>
+            <button id="bulk-cust-btn" onclick="saveBulkCust()" disabled class="mt-2 w-full py-3 rounded-xl bg-blue-600 text-white font-medium disabled:opacity-40">匯入</button>
         </div>
         <div>
             <h2 class="font-bold text-slate-800 mb-1">顏色名單</h2>
@@ -470,6 +478,14 @@ window.api = {
 
     // ---- 名單 ----
     addCustomer(name) { const ref = fs.doc(fs.collection(db, COL.customers)); bg(fs.setDoc(ref, { name, ...stamp() })); },
+    // 批次客戶：已有的只更新常叫品項（usual：出貨編號，常叫的排前面）；新的新增。每批 400 筆以內
+    bulkCustomers(rows) {
+        const ops = rows.map(r => b => {
+            if (r.target) b.update(fs.doc(db, COL.customers, r.target.id), { usual: r.usual, ...stamp() });
+            else b.set(fs.doc(fs.collection(db, COL.customers)), { name: r.name, usual: r.usual, ...stamp() });
+        });
+        for (let i = 0; i < ops.length; i += 400) { const b = fs.writeBatch(db); ops.slice(i, i + 400).forEach(f => f(b)); bg(b.commit()); }
+    },
     deleteCustomer(id) { bg(fs.deleteDoc(fs.doc(db, COL.customers, id))); },
     saveColors(list) { bg(fs.setDoc(fs.doc(db, COL.meta, 'colors'), { list, ...stamp() })); },
 
@@ -902,14 +918,20 @@ function renderAddItem() {
     if (addPick) return renderAddColors();
     const q = addQuery.trim().toLowerCase();
     const list = prep.products.filter(p => !q || `${p.shipCode || ''} ${p.code || ''} ${p.name || ''}`.toLowerCase().includes(q)).slice(0, 60);
+    const usual = q ? [] : usualProducts(cur());
+    const item = p => `<button onclick="pickProduct('${p.id}')" class="w-full text-left px-3 py-2.5 active:bg-slate-50 flex justify-between gap-2">
+            <span><span class="font-medium">${esc(p.name)}</span><br><span class="text-xs text-slate-500 font-mono">${esc(p.shipCode || '（未填出貨編號）')}</span></span>
+            <span class="text-xs text-slate-500 text-right shrink-0">${(p.colors || []).length ? esc(p.colors.join('、')) : '<span class="text-amber-600">未設顏色</span>'}</span></button>`;
     openModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-bold text-lg">加品項</h3><button onclick="closeModal()" class="text-slate-400 text-xl px-2">✕</button></div>
         <input id="add-q" value="${esc(addQuery)}" placeholder="搜尋 出貨編號／品名" autocomplete="off" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 mb-2">
-        <div id="add-results" class="divide-y divide-slate-100 border border-slate-200 rounded-xl max-h-[50vh] overflow-y-auto">
-        ${list.length ? list.map(p => `<button onclick="pickProduct('${p.id}')" class="w-full text-left px-3 py-2.5 active:bg-slate-50 flex justify-between gap-2">
-            <span><span class="font-medium">${esc(p.name)}</span><br><span class="text-xs text-slate-500 font-mono">${esc(p.shipCode || '（未填出貨編號）')}</span></span>
-            <span class="text-xs text-slate-500 text-right shrink-0">${(p.colors || []).length ? esc(p.colors.join('、')) : '<span class="text-amber-600">未設顏色</span>'}</span></button>`).join('')
+        <div id="add-results" class="border border-slate-200 rounded-xl max-h-[50vh] overflow-y-auto">
+        ${usual.length ? `<div class="px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-50 sticky top-0">這家常叫的</div>
+            <div class="divide-y divide-slate-100 bg-amber-50/40">${usual.map(item).join('')}</div>
+            <div class="px-3 py-1.5 text-xs font-bold text-slate-500 bg-slate-50 sticky top-0">全部產品</div>` : ''}
+        <div class="divide-y divide-slate-100">
+        ${list.length ? list.map(item).join('')
             : '<div class="px-3 py-6 text-center text-slate-400 text-sm">找不到符合的產品</div>'}
-        </div>
+        </div></div>
         <button onclick="openNewProduct()" class="need-editor w-full mt-3 py-2.5 rounded-xl border border-dashed border-slate-400 text-slate-600 text-sm"><i class="fa-solid fa-plus mr-1"></i>找不到？新增產品</button>
         ${canEdit() ? '' : '<p class="text-xs text-slate-500 mt-3 text-center">找不到產品的話，請管理者或技術員新增。</p>'}`);
     const inp = $('add-q');
@@ -992,7 +1014,7 @@ function saveColorSetup(pid) {
 // ---------- 設定 ----------
 function renderSettings() {
     $('customer-list').innerHTML = prep.customers.length ? prep.customers.map(c => `<div class="flex items-center justify-between px-3 py-2.5">
-        <span>${esc(c.name)}</span><button onclick="delCustomer('${c.id}')" class="text-red-500 px-2"><i class="fa-solid fa-trash-can"></i></button></div>`).join('')
+        <span>${esc(c.name)}${(c.usual || []).length ? `<span class="text-xs text-slate-400 ml-1">常叫 ${c.usual.length} 項</span>` : ''}</span><button onclick="delCustomer('${c.id}')" class="text-red-500 px-2"><i class="fa-solid fa-trash-can"></i></button></div>`).join('')
         : '<div class="px-3 py-4 text-sm text-slate-400">還沒有客戶</div>';
     $('color-list').innerHTML = prep.colors.length ? prep.colors.map((c, i) => `<div class="flex items-center gap-2 px-3 py-2">
         <span class="flex-1">${esc(c)}</span>
@@ -1033,6 +1055,64 @@ function saveBulkShip() {
     toast(`已匯入 ${todo.length} 個品項`);
 }
 document.addEventListener('input', e => { if (e.target.id === 'bulk-ship') previewBulkShip(); });
+
+// ---------- 批次貼上客戶 ----------
+// 名稱可能有空白（例：「九重葛園圃 黃士益(南投)」），所以只用 | 或 Tab 分欄；連續空白合成一個
+function parseCustBulk(text, customers) {
+    const byName = new Map(customers.map(c => [c.name, c]));
+    const seen = new Map(), rows = [];
+    text.split(/\r?\n/).forEach((line, i) => {
+        if (!line.trim()) return;
+        const [n, codes = ''] = line.split(/\s*[|｜\t]\s*/);
+        const name = (n || '').trim().replace(/\s+/g, ' ');
+        if (rows.length === 0 && /^客戶(名稱)?$/.test(name)) return;   // 標題列
+        const usual = [...new Set(codes.split(/[、,，\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean))];
+        const r = { line: i + 1, name, usual, errors: [], target: byName.get(name) || null };
+        if (!name) r.errors.push('沒有客戶名稱');
+        if (name && seen.has(name)) r.errors.push(`跟第 ${seen.get(name)} 行重複`); else if (name) seen.set(name, r.line);
+        r.action = !r.target ? 'new' : (r.target.usual || []).join('、') === usual.join('、') ? 'same' : 'update';
+        rows.push(r);
+    });
+    return rows;
+}
+let custRows = [];
+function previewBulkCust() {
+    const el = $('bulk-cust'); if (!el) return;
+    custRows = parseCustBulk(el.value, prep.customers);
+    const cnt = k => custRows.filter(r => !r.errors.length && r.action === k).length;
+    const bad = custRows.filter(r => r.errors.length).length;
+    const known = new Set(prep.products.map(p => p.shipCode).filter(Boolean));
+    const label = { new: '<span class="text-emerald-700">新增</span>', update: '<span class="text-amber-700">更新常叫</span>', same: '<span class="text-slate-400">沒變</span>' };
+    $('bulk-cust-preview').innerHTML = custRows.length ? `<div class="text-sm font-medium mb-1">新增 ${cnt('new')}｜更新 ${cnt('update')}｜沒變 ${cnt('same')}｜<span class="${bad ? 'text-red-600' : ''}">有錯 ${bad}</span></div>
+        <div class="max-h-64 overflow-y-auto border border-slate-200 rounded-xl bg-white"><table class="w-full text-xs">
+        ${custRows.map(r => `<tr class="border-b border-slate-100 ${r.errors.length ? 'bg-red-50' : ''}"><td class="px-2 py-1 text-slate-400">${r.line}</td>
+            <td class="px-2 py-1 whitespace-nowrap">${r.errors.length ? `<span class="text-red-600 font-bold">✗ ${esc(r.errors.join('、'))}</span>` : label[r.action]}</td>
+            <td class="px-2 py-1">${esc(r.name)}</td>
+            <td class="px-2 py-1 text-slate-500">${r.usual.length ? `${r.usual.length} 項${r.usual.some(c => !known.has(c)) ? `<span class="text-amber-600">（${r.usual.filter(c => !known.has(c)).length} 項 MES 沒有，會略過不顯示）</span>` : ''}` : '—'}</td></tr>`).join('')}</table></div>` : '';
+    $('bulk-cust-btn').disabled = !custRows.length || bad > 0 || !(cnt('new') + cnt('update'));
+}
+function saveBulkCust() {
+    previewBulkCust();
+    const todo = custRows.filter(r => !r.errors.length && r.action !== 'same');
+    if (!todo.length) return;
+    if (!confirm(`確定匯入？新增 ${todo.filter(r => !r.target).length} 個客戶、更新 ${todo.filter(r => r.target).length} 個。`)) return;
+    api.bulkCustomers(todo);
+    $('bulk-cust').value = ''; previewBulkCust();
+    toast(`已匯入 ${todo.length} 個客戶`);
+}
+document.addEventListener('input', e => { if (e.target.id === 'bulk-cust') previewBulkCust(); });
+
+// 這家客戶常叫的產品：先看備貨頁自己的歷史（越常出現越前面），再補匯入的常叫清單；最多 12 項
+function usualProducts(o) {
+    if (!o) return [];
+    const score = new Map();
+    prep.orders.filter(x => x.customer === o.customer && x.id !== o.id).forEach(x =>
+        new Set(PREP.lines(x).map(l => l.productId)).forEach(pid => score.set(pid, (score.get(pid) || 0) + 1)));
+    const out = [...score.entries()].sort((a, b) => b[1] - a[1]).map(([pid]) => findProduct(pid)).filter(Boolean);
+    const c = prep.customers.find(x => x.name === o.customer);
+    (c?.usual || []).forEach(code => { const p = prep.products.find(x => x.shipCode === code); if (p) out.push(p); });
+    return [...new Set(out)].slice(0, 12);
+}
 
 function addCustomer() {
     const v = $('new-customer').value.trim(); if (!v) return;
