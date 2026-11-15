@@ -898,7 +898,7 @@
                 <button onclick="closeBulkModal()" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
             <div class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3 leading-relaxed">
-                一行一個產品，欄位順序：<b>料號、品名、材料、穴數、單件重(g)、料頭重(g)、週期(秒)</b><br>
+                一行一個產品，欄位順序：<b>料號、品名、材料、穴數、單件重(g)、料頭重(g)、週期(秒)</b>，第 8 欄<b>每件個數</b>可省略<br>
                 從 Excel／Google 試算表整塊複製貼上最穩；也可以用逗號分隔。第一行是標題會自動略過。<br>
                 料號已存在的會<b class="text-amber-700">更新</b>規格（成型條件不動），新的料號會<b class="text-emerald-700">新增</b>。<br>
                 料號已存在時，<b>空白欄位會保留原值</b>（要留空請用 Excel 複製或逗號分隔）；只改週期可以只貼 <b>料號、週期</b> 兩欄。
@@ -909,7 +909,7 @@
                 <table class="w-full text-xs text-left">
                     <thead class="bg-slate-100 text-slate-600 sticky top-0"><tr>
                         <th class="px-2 py-1.5">行</th><th class="px-2 py-1.5">狀態</th><th class="px-2 py-1.5">料號</th><th class="px-2 py-1.5">品名</th><th class="px-2 py-1.5">材料</th>
-                        <th class="px-2 py-1.5 text-right">穴</th><th class="px-2 py-1.5 text-right">單件</th><th class="px-2 py-1.5 text-right">料頭</th><th class="px-2 py-1.5 text-right">週期</th>
+                        <th class="px-2 py-1.5 text-right">穴</th><th class="px-2 py-1.5 text-right">單件</th><th class="px-2 py-1.5 text-right">料頭</th><th class="px-2 py-1.5 text-right">週期</th><th class="px-2 py-1.5 text-right">每件</th>
                     </tr></thead>
                     <tbody id="bulk-preview" class="divide-y divide-slate-100"></tbody>
                 </table>
@@ -970,6 +970,10 @@
                     <div>
                         <label class="block text-xs font-semibold text-slate-600 mb-1">出貨編號</label>
                         <input type="text" id="prod-ship-code" placeholder="如：XTF-001（出貨單上的編號）" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">每件個數（一箱裝幾個）</label>
+                        <input type="number" id="prod-pack-qty" min="1" step="1" inputmode="numeric" placeholder="如：900" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none">
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-600 mb-1">這個產品有哪些顏色</label>
@@ -1571,8 +1575,11 @@
         const UNFILLED_WARN = '⚠ 這個產品的成型數據還沒填（週期 999 是佔位值），以下數字不能用。請先到「產品與模具資料」補上。';
         function moldBadge(p) { return Number(p.cycleTime) === 999 ? ' <span class="ml-1 align-middle bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-medium px-1.5 py-0.5 rounded">成型數據未填</span>' : ''; }
         function shipInfo(p) {
-            if (!p.shipCode && !(p.colors || []).length) return '';
-            return `<div class="text-[11px] text-slate-500 mt-0.5">${p.shipCode ? `出貨 <span class="font-mono">${esc(p.shipCode)}</span>` : ''}${p.shipCode && (p.colors || []).length ? '・' : ''}${esc((p.colors || []).join('、'))}</div>`;
+            const parts = [];
+            if (p.shipCode) parts.push(`出貨 <span class="font-mono">${esc(p.shipCode)}</span>`);
+            if (p.packQty > 0) parts.push(`每件 ${esc(Number(p.packQty).toLocaleString())} 個`);
+            if ((p.colors || []).length) parts.push(esc(p.colors.join('、')));
+            return parts.length ? `<div class="text-[11px] text-slate-500 mt-0.5">${parts.join('・')}</div>` : '';
         }
 
         // ==================== 產品分類（依出貨編號前三碼） ====================
@@ -1792,6 +1799,7 @@
                 document.getElementById('prod-runner-weight').value = p.runnerWeight;
                 document.getElementById('prod-cycle-time').value = p.cycleTime;
                 document.getElementById('prod-ship-code').value = p.shipCode || '';
+                document.getElementById('prod-pack-qty').value = p.packQty > 0 ? p.packQty : '';
             } else {
                 title.textContent = '新增產品與模具資料';
                 document.getElementById('product-form').reset();
@@ -1844,6 +1852,7 @@
                 runnerWeight: parseFloat(document.getElementById('prod-runner-weight').value) || 0,
                 cycleTime: parseFloat(document.getElementById('prod-cycle-time').value) || 0,
                 shipCode: document.getElementById('prod-ship-code').value.trim().toUpperCase(),
+                packQty: Math.max(0, parseInt(document.getElementById('prod-pack-qty').value, 10) || 0),   // 0 = 未填
                 colors: [...document.querySelectorAll('#prod-colors input:checked')].map(x => x.value)
             };
 
@@ -1983,7 +1992,7 @@
             if (t.length <= 7) return t;
             return [t[0], t.slice(1, t.length - 5).join(' '), t[t.length - 5], ...t.slice(-4)];
         }
-        const BULK_FIELDS = ['name', 'material', 'cavities', 'partWeight', 'runnerWeight', 'cycleTime'];
+        const BULK_FIELDS = ['name', 'material', 'cavities', 'partWeight', 'runnerWeight', 'cycleTime', 'packQty'];   // packQty（每件個數）是選填的第 8 欄
         // 料號已存在：空白欄位保留舊值（記在 r.blanks，存檔時不寫）；新料號：照原本檢查
         // 兩欄格式「料號、週期」只能用在已存在的料號
         function parseBulk(text, existing) {
@@ -2001,7 +2010,7 @@
                 const code = (c[0] || '').trim();
                 const old = byCode.get(code);
                 const r = { line: i + 1, code, twoCol, existingId: old?.id || null, blanks: [], errors: [] };
-                const raw = { name: c[1], material: c[2], cavities: c[3], partWeight: c[4], runnerWeight: c[5], cycleTime: c[6] };
+                const raw = { name: c[1], material: c[2], cavities: c[3], partWeight: c[4], runnerWeight: c[5], cycleTime: c[6], packQty: c[7] };
                 if (!twoCol && c.length < 7) r.errors.push(`欄位只有 ${c.length} 個（要 7 個；只改週期可貼「料號、週期」兩欄）`);
                 if (!code) r.errors.push('沒有料號');
                 if (code && seen.has(code)) r.errors.push(`料號跟第 ${seen.get(code)} 行重複`);
@@ -2015,12 +2024,14 @@
                         if (isBlank(v) && old && !(twoCol && k === 'cycleTime')) { r.blanks.push(k); r[k] = old[k]; return; }
                         if (k === 'name' || k === 'material') r[k] = String(v ?? '').trim();
                         else if (k === 'runnerWeight' && isBlank(v)) r[k] = 0;
+                        else if (k === 'packQty' && isBlank(v)) r[k] = 0;   // 新產品沒填＝未填
                         else r[k] = num(v);
                     });
                     if (!r.blanks.includes('name') && !r.name) r.errors.push('沒有品名');
                     if (!r.blanks.includes('cavities') && !(Number.isInteger(r.cavities) && r.cavities >= 1)) r.errors.push('穴數要是 ≥1 的整數');
                     if (!r.blanks.includes('partWeight') && !(r.partWeight > 0)) r.errors.push('單件重要 > 0');
                     if (!r.blanks.includes('runnerWeight') && !(r.runnerWeight >= 0)) r.errors.push('料頭重不是數字');
+                    if (!r.blanks.includes('packQty') && !(Number.isInteger(r.packQty) && r.packQty >= 0)) r.errors.push('每件個數要是整數');
                     if (!r.blanks.includes('cycleTime') && !(r.cycleTime > 0)) r.errors.push('週期要 > 0');
                     else if (twoCol && r.cycleTime === 999) r.errors.push('週期不能填 999（999 代表成型數據未填）');
                 }
@@ -2046,7 +2057,7 @@
                     : '<span class="text-emerald-700 font-bold">新增</span>';
                 return `<tr class="${r.errors.length ? 'bg-rose-50' : ''}"><td class="px-2 py-1 text-slate-400">${r.line}</td><td class="px-2 py-1">${st}</td>
                     <td class="px-2 py-1 font-mono">${esc(r.code)}</td>${cell(r, 'name', r.name)}${cell(r, 'material', r.material)}
-                    ${cell(r, 'cavities', r.cavities, 1)}${cell(r, 'partWeight', r.partWeight, 1)}${cell(r, 'runnerWeight', r.runnerWeight, 1)}${cell(r, 'cycleTime', r.cycleTime, 1)}</tr>`;
+                    ${cell(r, 'cavities', r.cavities, 1)}${cell(r, 'partWeight', r.partWeight, 1)}${cell(r, 'runnerWeight', r.runnerWeight, 1)}${cell(r, 'cycleTime', r.cycleTime, 1)}${cell(r, 'packQty', r.packQty || '', 1)}</tr>`;
             }).join('');
             document.getElementById('bulk-save-btn').disabled = !(add + upd) || bad > 0;
         }
