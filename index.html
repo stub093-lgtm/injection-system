@@ -244,6 +244,10 @@
                         <i class="fa-solid fa-paste"></i>
                         <span>批次貼上</span>
                     </button>
+                    <button onclick="openMergeModal()" class="need-editor bg-white hover:bg-slate-50 text-amber-700 border border-amber-200 px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center justify-center gap-2 flex-1 sm:flex-none">
+                        <i class="fa-solid fa-code-merge"></i>
+                        <span>合併重複</span>
+                    </button>
                     <button onclick="openProductModal()" class="need-editor bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium text-sm shadow-sm transition flex items-center justify-center gap-2 flex-1 sm:flex-none">
                         <i class="fa-solid fa-plus"></i>
                         <span>新增產品資料</span>
@@ -917,6 +921,27 @@
         </div>
     </div>
 
+    <!-- 合併重複產品 Modal -->
+    <div id="merge-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-start sm:items-center justify-center p-3 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-5 shadow-xl border border-slate-200 space-y-3 my-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-code-merge text-amber-600 mr-1.5"></i>合併重複產品</h3>
+                <button onclick="closeMergeModal()" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3 leading-relaxed">
+                上面是<b>有成型數據、但沒填出貨編號</b>的產品；下拉選單選它對應的<b>佔位產品</b>（從備貨匯入、週期 999 的那筆）。<br>
+                合併後：佔位產品的<b class="text-amber-700">出貨編號、顏色</b>搬到上面這筆，佔位產品刪除；指向佔位產品的生產紀錄、備貨單品項改指向這筆。<b>成型數據、品名、料號都不動。</b><br>
+                系統已先選好最像的一筆，<b class="text-rose-600">請逐筆確認</b>，不對就改選或選「不合併」。需要連上網路。
+            </div>
+            <div id="merge-list" class="space-y-2 max-h-[55vh] overflow-y-auto"></div>
+            <div id="merge-msg" class="text-sm font-semibold text-slate-700"></div>
+            <div class="flex justify-end gap-2 pt-1">
+                <button onclick="closeMergeModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">取消</button>
+                <button id="merge-save-btn" onclick="saveMerge()" disabled class="bg-amber-600 hover:bg-amber-700 disabled:bg-slate-300 text-white px-5 py-2 rounded-xl font-bold text-sm">合併</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 產品 Modal -->
     <div id="product-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 space-y-5 max-h-[92vh] overflow-y-auto">
@@ -1156,7 +1181,8 @@
         async function commitInChunks(ops) {
             for (let i = 0; i < ops.length; i += 400) {
                 const batch = fs.writeBatch(db);
-                ops.slice(i, i + 400).forEach(op => op.type === 'delete' ? batch.delete(op.ref) : batch.set(op.ref, op.data));
+                ops.slice(i, i + 400).forEach(op => op.type === 'delete' ? batch.delete(op.ref)
+                    : op.type === 'update' ? batch.update(op.ref, op.data) : batch.set(op.ref, op.data));
                 await batch.commit();
             }
         }
@@ -1248,6 +1274,40 @@
                 batch.delete(fs.doc(db, 'products', id));
                 batch.delete(fs.doc(db, 'sops', id));
                 bg(batch.commit());
+            },
+            // 合併重複產品：佔位產品的出貨編號、顏色搬到保留的產品，刪掉佔位產品；
+            // 生產紀錄、備貨單品項改指向保留的產品。要等伺服器確認（不用 bg），失敗會丟錯
+            async mergeProducts(pairs) {
+                const P = window.appData.products;
+                const remap = new Map(), ops = [];
+                pairs.forEach(({ keepId, removeId }) => {
+                    const keep = P.find(p => p.id === keepId), rm = P.find(p => p.id === removeId);
+                    if (!keep || !rm || keepId === removeId) return;
+                    const colors = [...new Set([...(keep.colors || []), ...(rm.colors || [])])];
+                    ops.push({ type: 'update', ref: fs.doc(db, 'products', keepId), data: { shipCode: rm.shipCode, colors, ...stamp() } });
+                    ops.push({ type: 'delete', ref: fs.doc(db, 'products', removeId) });
+                    ops.push({ type: 'delete', ref: fs.doc(db, 'sops', removeId) });
+                    remap.set(removeId, keep);
+                });
+                let logCount = 0, prepCount = 0, prepOk = true;
+                window.appData.logs.filter(l => remap.has(l.productId)).forEach(l => {
+                    const k = remap.get(l.productId);
+                    ops.push({ type: 'update', ref: fs.doc(db, 'logs', l.id), data: { productId: k.id, productCode: k.code, productName: k.name } });
+                    logCount++;
+                });
+                try {
+                    const snap = await fs.getDocs(fs.collection(db, 'prepOrders'));
+                    snap.docs.forEach(d => {
+                        const upd = {};
+                        Object.entries(d.data().lines || {}).forEach(([lid, l]) => {
+                            const k = l && remap.get(l.productId);
+                            if (k) { upd[`lines.${lid}.productId`] = k.id; upd[`lines.${lid}.name`] = k.name; prepCount++; }
+                        });
+                        if (Object.keys(upd).length) ops.push({ type: 'update', ref: d.ref, data: upd });
+                    });
+                } catch (e) { console.warn(e); prepOk = false; }
+                await commitInChunks(ops);
+                return { merged: remap.size, logCount, prepCount, prepOk };
             },
 
             // SOP：同時寫一份到 history，作為版本紀錄
@@ -1816,6 +1876,89 @@
             if (!confirm(`確定刪除「${p?.name}」？\n其成型條件 SOP 會一併刪除${logCount ? `；${logCount} 筆歷史紀錄會保留並標示為已刪除產品` : ''}。`)) return;
             window.api.deleteProduct(productId);
             showToast('產品資料已刪除');
+        }
+
+        // ==================== 合併重複產品 ====================
+        // 情境：有成型數據的產品沒填出貨編號，備貨匯入時又建了一筆週期 999 的佔位產品
+        const MERGE_CN = { '一': 1, '二': 2, '兩': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
+        function mergeNorm(s) {
+            return String(s || '').toLowerCase()
+                .replace(/吋/g, '寸').replace(/公分/g, 'cm')
+                .replace(/[一二兩三四五六七八九]/g, c => MERGE_CN[c])
+                .replace(/[\s()（）\[\]【】\-_,，、]/g, '');
+        }
+        // 相似度分數（只用來預選，最後由使用者確認）：料號相同、品名含料號、尺寸數字、共同的中文字
+        function mergeScore(keep, cand) {
+            let s = 0;
+            if (keep.code && keep.code === cand.code) s += 100;
+            const kc = mergeNorm(keep.code);
+            if (kc.length >= 3 && mergeNorm(cand.name).includes(kc)) s += 50;
+            const nums = v => mergeNorm(v).match(/\d+(\.\d+)?/g) || [];
+            const kn = nums(keep.name), cn = nums(cand.name);
+            kn.forEach(n => { s += cn.includes(n) ? 10 : -8; });
+            cn.forEach(n => { if (!kn.includes(n)) s -= 4; });
+            const chars = v => new Set(mergeNorm(v).match(/[一-鿿]/g) || []);
+            const kz = chars(keep.name), cz = chars(cand.name);
+            kz.forEach(c => { if (cz.has(c)) s += 2; });
+            cz.forEach(c => { if (!kz.has(c)) s -= 1; });
+            return s;
+        }
+        let mergeKeeps = [], mergeCands = [];
+        function openMergeModal() {
+            const all = window.appData.products || [];
+            mergeKeeps = all.filter(p => !p.shipCode && !isUnfilled(p)).sort((a, b) => String(a.code).localeCompare(String(b.code)));
+            mergeCands = all.filter(p => p.shipCode && isUnfilled(p));
+            const box = document.getElementById('merge-list');
+            if (!mergeKeeps.length || !mergeCands.length) {
+                box.innerHTML = '<p class="text-sm text-slate-500 py-6 text-center">沒有需要合併的產品：有成型數據的產品都已經填了出貨編號。</p>';
+            } else {
+                box.innerHTML = mergeKeeps.map((k, i) => {
+                    const ranked = mergeCands.map(c => ({ c, s: mergeScore(k, c) })).sort((a, b) => b.s - a.s);
+                    const pick = ranked[0] && ranked[0].s >= 15 ? ranked[0].c.id : '';
+                    return `<div class="border border-slate-200 rounded-xl p-3">
+                        <div class="text-sm"><span class="font-semibold text-slate-800">${esc(k.name)}</span>
+                            <span class="text-xs text-slate-500 font-mono ml-1">[${esc(k.code)}]</span>
+                            <span class="text-xs text-blue-700 ml-1">週期 ${esc(k.cycleTime)}s</span></div>
+                        <div class="flex items-center gap-2 mt-1.5">
+                            <i class="fa-solid fa-arrow-left text-amber-500 text-xs shrink-0"></i>
+                            <select id="merge-sel-${i}" onchange="updateMergeBtn()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-2 text-sm">
+                                <option value="">— 不合併 —</option>
+                                ${ranked.map(({ c }) => `<option value="${esc(c.id)}" ${c.id === pick ? 'selected' : ''}>${esc(c.shipCode)}　${esc(c.name)}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+            updateMergeBtn();
+            document.getElementById('merge-modal').classList.remove('hidden');
+        }
+        function closeMergeModal() { document.getElementById('merge-modal').classList.add('hidden'); }
+        function mergePairs() {
+            return mergeKeeps.map((k, i) => ({ keep: k, remove: mergeCands.find(c => c.id === document.getElementById(`merge-sel-${i}`)?.value) }))
+                .filter(x => x.remove);
+        }
+        function updateMergeBtn() {
+            const pairs = mergePairs(), btn = document.getElementById('merge-save-btn'), msg = document.getElementById('merge-msg');
+            const seen = new Set(), dup = pairs.find(p => seen.has(p.remove.id) || !seen.add(p.remove.id));
+            msg.innerHTML = dup ? `<span class="text-rose-600">「${esc(dup.remove.shipCode)} ${esc(dup.remove.name)}」被選了兩次，請改掉其中一個</span>`
+                : pairs.length ? `將合併 ${pairs.length} 組` : '';
+            btn.disabled = !pairs.length || !!dup;
+            btn.textContent = pairs.length ? `合併 ${pairs.length} 組` : '合併';
+        }
+        async function saveMerge() {
+            const pairs = mergePairs(), btn = document.getElementById('merge-save-btn');
+            if (!pairs.length) return;
+            btn.disabled = true; btn.textContent = '合併中…';
+            try {
+                const r = await window.api.mergeProducts(pairs.map(p => ({ keepId: p.keep.id, removeId: p.remove.id })));
+                closeMergeModal();
+                showToast(`已合併 ${r.merged} 組` + (r.logCount ? `，改了 ${r.logCount} 筆生產紀錄` : '') + (r.prepCount ? `，改了 ${r.prepCount} 個備貨品項` : '')
+                    + (r.prepOk ? '' : '（讀不到備貨單，備貨單沒有改）'));
+            } catch (e) {
+                console.warn(e);
+                showToast('合併失敗，什麼都沒有改，請確認網路後再試');
+                updateMergeBtn();
+            }
         }
 
         // ==================== 批次貼上產品 ====================
