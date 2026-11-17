@@ -519,6 +519,38 @@
                                 <span class="text-xs text-slate-500 shrink-0">目</span>
                             </div>
                         </div>
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <div class="flex items-center justify-between gap-2 mb-1">
+                                <label for="sop-blow-cavity" class="text-xs text-slate-500">母模吹氣</label>
+                                <select id="sop-blow-cavity" onchange="updateBlowUI()" class="bg-white border border-slate-300 rounded-lg px-1.5 py-0.5 text-xs font-semibold text-slate-700">
+                                    <option value="無">無</option>
+                                    <option value="有">有</option>
+                                </select>
+                            </div>
+                            <div id="blow-row-cavity" class="hidden space-y-1.5">
+                                <div class="flex items-center gap-1.5">
+                                    <input type="number" step="0.1" min="0" inputmode="decimal" id="sop-blow-cavity-time" placeholder="吹氣秒數" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800">
+                                    <span class="text-xs text-slate-500 shrink-0">秒</span>
+                                </div>
+                                <input type="number" step="0.1" min="0" inputmode="decimal" id="sop-blow-cavity-delay" placeholder="延遲位置" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800">
+                            </div>
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <div class="flex items-center justify-between gap-2 mb-1">
+                                <label for="sop-blow-core" class="text-xs text-slate-500">公模吹氣</label>
+                                <select id="sop-blow-core" onchange="updateBlowUI()" class="bg-white border border-slate-300 rounded-lg px-1.5 py-0.5 text-xs font-semibold text-slate-700">
+                                    <option value="無">無</option>
+                                    <option value="有">有</option>
+                                </select>
+                            </div>
+                            <div id="blow-row-core" class="hidden space-y-1.5">
+                                <div class="flex items-center gap-1.5">
+                                    <input type="number" step="0.1" min="0" inputmode="decimal" id="sop-blow-core-time" placeholder="吹氣秒數" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800">
+                                    <span class="text-xs text-slate-500 shrink-0">秒</span>
+                                </div>
+                                <input type="number" step="0.1" min="0" inputmode="decimal" id="sop-blow-core-delay" placeholder="延遲位置" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-800">
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1537,6 +1569,8 @@
             ['sop-metering-stroke', 'meteringStroke'], ['sop-metering-time-actual', 'meteringTimeActual'], ['sop-suck-back', 'suckBack'], ['sop-back-pressure', 'backPressure'],
             ['sop-cooling-time', 'coolingTime'], ['sop-open-stroke', 'openStroke'],
             ['sop-eject-type', 'ejectType'], ['sop-ejector', 'ejector'], ['sop-chain-links', 'chainLinks'],
+            ['sop-blow-cavity', 'blowCavity'], ['sop-blow-cavity-time', 'blowCavityTime'], ['sop-blow-cavity-delay', 'blowCavityDelay'],
+            ['sop-blow-core', 'blowCore'], ['sop-blow-core-time', 'blowCoreTime'], ['sop-blow-core-delay', 'blowCoreDelay'],
             ['sop-notes', 'notes']
         ];
 
@@ -2152,6 +2186,7 @@
                 if (el) el.value = sop[key] ?? '';
             });
             updateEjectTypeUI();
+            updateBlowUI();
             sopDirty = false;
         }
 
@@ -2162,6 +2197,15 @@
             const chain = sel.value === '拉鏈';
             document.getElementById('eject-row-ejector').classList.toggle('hidden', chain);
             document.getElementById('eject-row-chain').classList.toggle('hidden', !chain);
+        }
+
+        // 母模／公模吹氣：選「有」才顯示秒數與延遲位置
+        function updateBlowUI() {
+            ['cavity', 'core'].forEach(side => {
+                const sel = document.getElementById('sop-blow-' + side);
+                if (!sel.value) sel.value = '無';   // 舊資料沒有這個欄位，一律視為無
+                document.getElementById('blow-row-' + side).classList.toggle('hidden', sel.value !== '有');
+            });
         }
 
         function saveSopData() {
@@ -2181,6 +2225,9 @@
             // 只留目前選的那種脫模方式的數值，避免列印或修改紀錄出現兩種
             if (sop.ejectType === '拉鏈') sop.ejector = '';
             else { sop.ejectType = '頂出'; sop.chainLinks = null; }
+            // 沒有吹氣就不留秒數與延遲位置
+            if (sop.blowCavity !== '有') { sop.blowCavity = '無'; sop.blowCavityTime = null; sop.blowCavityDelay = null; }
+            if (sop.blowCore !== '有') { sop.blowCore = '無'; sop.blowCoreTime = null; sop.blowCoreDelay = null; }
 
             sopDirty = false;
             window.api.saveSop(prodId, sop);
@@ -2195,7 +2242,9 @@
             injPos1: '位置1', injPos2: '位置2', injPos3: '位置3', injTime: '射出時間', injTimeActual: '射出時間(實際)',
             holdPressure: '保壓壓力', holdTime: '保壓時間', vpSwitch: 'V/P 切換',
             meteringStroke: '計量行程', meteringTimeActual: '加料時間(實際)', suckBack: '鬆退', backPressure: '背壓',
-            coolingTime: '冷卻時間', openStroke: '開模行程', ejectType: '脫模方式', ejector: '頂出', chainLinks: '拉鏈目數', notes: '備註'
+            coolingTime: '冷卻時間', openStroke: '開模行程', ejectType: '脫模方式', ejector: '頂出', chainLinks: '拉鏈目數',
+            blowCavity: '母模吹氣', blowCavityTime: '母模吹氣秒數', blowCavityDelay: '母模吹氣延遲位置',
+            blowCore: '公模吹氣', blowCoreTime: '公模吹氣秒數', blowCoreDelay: '公模吹氣延遲位置', notes: '備註'
         };
         let historyCache = [];
 
@@ -2222,7 +2271,7 @@
                 if (!prev) {
                     changes = '<span class="text-slate-400">最早的一筆紀錄</span>';
                 } else {
-                    const hv = (o, k) => k === 'ejectType' ? (o[k] || '頂出') : (o[k] ?? '');   // 舊紀錄沒有脫模方式＝頂出
+                    const hv = (o, k) => k === 'ejectType' ? (o[k] || '頂出') : (k === 'blowCavity' || k === 'blowCore') ? (o[k] || '無') : (o[k] ?? '');   // 舊紀錄沒有脫模方式＝頂出、沒有吹氣＝無
                     const diff = Object.keys(SOP_LABELS).filter(k => String(hv(h, k)) !== String(hv(prev, k)));
                     changes = diff.length === 0 ? '<span class="text-slate-400">數值無變動</span>'
                         : diff.map(k => `<span class="inline-block bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 mr-1 mb-1 text-xs">${SOP_LABELS[k]}：${esc(hv(prev, k) === '' ? '空' : hv(prev, k))} → <strong>${esc(hv(h, k) === '' ? '空' : hv(h, k))}</strong></span>`).join('');
@@ -2246,6 +2295,7 @@
                 if (el) el.value = h[key] ?? '';
             });
             updateEjectTypeUI();
+            updateBlowUI();
             sopDirty = true;
             document.getElementById('history-modal').classList.add('hidden');
             showToast('已載入舊版本到畫面，確認無誤後請按「儲存成型條件」');
