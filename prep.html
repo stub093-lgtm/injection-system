@@ -425,6 +425,9 @@ const stamp = () => ({ updatedAt: now(), updatedBy: who() });
 const lineId = () => 'L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const orderRef = (id) => fs.doc(db, COL.orders, id);
 
+// 佔位成型數據：週期 999 = 未填（index.html 的 isUnfilled 靠這個值判斷，兩邊要一致）
+const PLACEHOLDER_MOLD = { material: '未填', cavities: 1, partWeight: 1, runnerWeight: 0, cycleTime: 999 };
+
 window.api = {
     async signIn(email, pw) { await fa.signInWithEmailAndPassword(auth, email.trim(), pw); },
     async logout() { await fa.signOut(auth); },
@@ -493,7 +496,7 @@ window.api = {
     createProduct({ shipCode, name, colors }) {
         const id = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
         const p = { code: shipCode || ('SHIP-' + Date.now().toString(36).toUpperCase()), name, shipCode, colors,
-            material: '未填', cavities: 1, partWeight: 1, runnerWeight: 0, cycleTime: 999, ...stamp() };
+            ...PLACEHOLDER_MOLD, ...stamp() };
         bg(fs.setDoc(fs.doc(db, 'products', id), p));
         return { ...p, id };
     },
@@ -502,7 +505,7 @@ window.api = {
         const ops = rows.map((r, i) => b => {
             if (r.target) b.update(fs.doc(db, 'products', r.target.id), { shipCode: r.shipCode, colors: r.colors, ...stamp() });
             else b.set(fs.doc(db, 'products', `p_${Date.now()}_${i}`), { code: r.shipCode, name: r.name, shipCode: r.shipCode, colors: r.colors,
-                material: '未填', cavities: 1, partWeight: 1, runnerWeight: 0, cycleTime: 999, ...stamp() });
+                ...PLACEHOLDER_MOLD, ...stamp() });
         });
         for (let i = 0; i < ops.length; i += 400) { const b = fs.writeBatch(db); ops.slice(i, i + 400).forEach(f => f(b)); bg(b.commit()); }
     },
