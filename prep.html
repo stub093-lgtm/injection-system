@@ -262,6 +262,7 @@ const PREP = (() => {
             if (byName.length > 1) r.errors.push(`MES 有 ${byName.length} 個同名產品，請先到 MES 手動填出貨編號`);
             r.target = ex || (byName.length === 1 ? byName[0] : null);
             r.action = !r.target ? 'new' : ex ? 'update' : 'link';
+            if (r.action === 'new' && codeTaken(products, r.shipCode)) r.errors.push(`編號 ${r.shipCode} 已經是 MES 另一個產品的料號，請先到 MES 處理`);
             if (r.action === 'update' && String((ex.colors || []).join('、')) === r.colors.join('、')) r.action = 'same';
             rows.push(r);
         });
@@ -278,6 +279,11 @@ const PREP = (() => {
         // 沒寫年份：出貨日是未來的事。照今年算已經過了半年以上，就是指明年（12 月底打「1/5」）
         if (mm.length === 3 && real(y + 1) && daysBetween(iso(y), today) > 180) y++;
         return real(y) ? iso(y) : '';
+    }
+    // 新建產品時料號 = 出貨編號；料號不可重複，所以先確認沒有別的產品已用這個料號（不分大小寫）
+    function codeTaken(products, code) {
+        const c = String(code || '').toUpperCase();
+        return !!c && products.some(p => String(p.code || '').toUpperCase() === c);
     }
     // 整張備貨單文字：
     //   客戶：XXX ／ 出貨日期：2026/11/13
@@ -321,7 +327,9 @@ const PREP = (() => {
                     if (!it.color && pc.length) r.warns.push('沒分顏色');
                 });
             } else if (!r.errors.length) {
-                if (!r.name) r.errors.push('找不到這個出貨編號'); else r.isNew = true;
+                if (!r.name) r.errors.push('找不到這個出貨編號');
+                else if (r.shipCode && codeTaken(products, r.shipCode)) r.errors.push(`編號 ${r.shipCode} 已經是 MES 另一個產品的料號，請先到 MES 處理`);
+                else r.isNew = true;
             }
         });
         return out;
