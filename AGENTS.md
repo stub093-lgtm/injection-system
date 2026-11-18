@@ -74,6 +74,8 @@
 | H | `DEFAULT_SOP` 定義在畫面邏輯，雲端層的 `saveProductsBatch` 也會用 | `index.html` | 不可搬進函式內或改名 |
 | I | `logs` 內的 `productCode`、`productName`、`cycleTime`、`cavities` 是當時的快照 | `index.html` | **故意重複存**，用來保住歷史達成率，不要「正規化」掉 |
 | J | 本機快取 `INJECTION_MOLDING_APP_CACHE_V3` 存整份 `appData` | `index.html` | 在 `appData` 加大型資料前先想容量（localStorage 約 5MB） |
+| K | `invMaterials` 原料品項 | `inventory.html` 寫、`index.html` 讀成 `appData.invMaterials`（下模紀錄選原料） | 品項名稱規則 `INV.materialName` 與 `index.html` 的 `invMaterialName` 要一致；下模紀錄的 `materialName`、`partWeight`、`runnerWeight` 是快照（同 I） |
+| L | `invMoves` 退料 | `inventory.html` | 退料（`type:'return'`）用 `drawId` 對應領料，0 kg 代表全部用完；下模紀錄**不寫入**庫存帳，只算理論用量，避免和領料重複扣 |
 
 ## 6. 常見修改的做法
 
