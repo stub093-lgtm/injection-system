@@ -67,7 +67,7 @@
 | A | 四頁各自有一份相同的起手式：`firebaseConfig`、`FB_VER`、`ROLE_LABEL`、`emailKey`、`showScreen`、`errMsg`、`bg`、`stamp`、`handleUser`、`esc`、`todayLocal`、`canEdit` | 四頁 | 改其中一個就 `grep` 四頁一起改。注意既有差異不要「統一」掉：`index.html` 的提示是 `showToast`、其他頁是 `toast`；`delivery.html` 的 `bg` 會回傳 promise 並重丟錯誤；只有 `index.html` 有註冊／驗證／待開通畫面 |
 | B | `products` 集合 | `index.html`（全部欄位）、`prep.html`（讀；寫 `shipCode`、`colors`；建佔位產品） | 改產品欄位名稱或意義時兩頁都要查。`prep.html` 建的產品**沒有 `sops` 文件**，所以 `index.html` 讀 SOP 一律寫 `appData.sops[id] \|\| {}` |
 | C | 佔位產品：`cycleTime === 999` | `prep.html` 的 `PLACEHOLDER_MOLD`、`index.html` 的 `isUnfilled()` | 判斷一律用 `isUnfilled(p)`，不要直接寫 `=== 999`。999 不可拿去計算 |
-| D | `prepMeta/colors` 顏色名單 | `prep.html` 寫、`index.html` 讀成 `appData.shipColors` | 改結構兩頁一起改 |
+| D | `prepMeta/colors` 顏色名單 | `prep.html` 寫、`index.html` 讀成 `appData.shipColors`、`inventory.html` 讀成 `inv.colors`（原料顏色下拉） | 改結構三頁一起改 |
 | E | `prepOrders` 的 `lines.{lineId}.productId`／`.name` | `prep.html`；`index.html` 的 `mergeProducts` 會改寫它 | 改訂單品項結構時，`mergeProducts` 一定要跟著改 |
 | F | `members/{email小寫}.role`（`admin`／`editor`／`operator`） | 四頁 | 用 `body[data-role]`＋`.need-admin`／`.need-editor` 隱藏，JS 用 `canEdit()`／`isAdmin()`。真正的權限在 Firestore 規則（不在此 repo），**新增集合要提醒使用者去加規則** |
 | G | `index.html` 雲端層直接碰這些 DOM id：`printable-sop-card`、`user-chip`、`sync-status-indicator`、`migration-banner`、`migration-summary`、`offline-banner`、`log-date`、`auth-*` | `index.html` | 這些 id 不可改名、不可刪 |

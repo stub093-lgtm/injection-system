@@ -231,7 +231,7 @@ const firebaseConfig = {
 const COL = { materials: 'invMaterials', suppliers: 'invSuppliers', moves: 'invMoves' };
 const ROLE_LABEL = { admin: '管理者', editor: '技術員', operator: '作業員' };
 
-window.inv = { materials: [], suppliers: [], moves: [] };
+window.inv = { materials: [], suppliers: [], moves: [], colors: [] };
 window.currentUser = null;
 
 let fa, fs, auth, db;
@@ -291,6 +291,10 @@ function startListeners() {
     listen('moves', fs.collection(db, COL.moves), s => {
         window.inv.moves = rows(s).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
     });
+    // 顏色名單（prepMeta/colors，備貨頁維護）：原料「顏色」用選的。讀不到就靜默略過，表單退回自己打字
+    unsubs.push(fs.onSnapshot(fs.doc(db, 'prepMeta', 'colors'), snap => {
+        window.inv.colors = snap.exists() ? (snap.data().list || []) : [];
+    }, err => { console.warn('顏色名單讀取失敗（請確認 Firestore 規則）', err.code); }));
 }
 
 const stamp = () => ({ updatedAt: new Date().toISOString(), updatedBy: window.currentUser?.email || '' });
@@ -319,7 +323,7 @@ function handleUser(user) {
     if (memberUnsub) { memberUnsub(); memberUnsub = null; }
     stopListeners();
     window.currentUser = null;
-    window.inv = { materials: [], suppliers: [], moves: [] };
+    window.inv = { materials: [], suppliers: [], moves: [], colors: [] };
     if (!user) { document.body.dataset.role = ''; showScreen('login'); return; }
     if (!user.emailVerified) { showScreen('blocked', `${user.email} 尚未完成 Email 驗證，請到 MES 完成驗證。`); return; }
     const email = emailKey(user.email);
@@ -664,7 +668,7 @@ function openMaterialForm(id) {
         <div class="space-y-3">
             <div class="grid grid-cols-2 gap-2">
                 <div>${lbl('基材')}<input id="m-base" list="m-base-list" value="${esc(m.base)}" class="${inputCls}"><datalist id="m-base-list">${bases.map(b => `<option value="${esc(b)}">`).join('')}</datalist></div>
-                <div>${lbl('顏色')}<input id="m-color" value="${esc(m.color)}" placeholder="例如：磚紅" class="${inputCls}"></div>
+                <div>${lbl('顏色')}${colorField(m.color)}</div>
             </div>
             <div>${lbl('流動性')}<select id="m-flow" class="${inputCls}"><option value="高">高流動</option><option value="低">低流動</option></select></div>
             <div>${lbl('備註（MI 值、牌號）')}<input id="m-note" value="${esc(m.note)}" placeholder="例如：MI 20" class="${inputCls}"></div>
@@ -679,8 +683,20 @@ function openMaterialForm(id) {
         </div>`);
     $('m-flow').value = m.flow || '高';
 }
+// 原料顏色：從顏色名單選；名單沒有的選「其他」自己打。名單讀不到時就只有打字框
+function colorField(cur) {
+    const list = inv.colors || [];
+    if (!list.length) return `<input id="m-color" value="${esc(cur)}" placeholder="例如：磚紅" class="${inputCls}">`;
+    const opts = cur && !list.includes(cur) ? [...list, cur] : list;
+    return `<select id="m-color-sel" onchange="$('m-color').classList.toggle('hidden', this.value !== '__other')" class="${inputCls}">
+            <option value="">請選擇</option>${opts.map(c => `<option value="${esc(c)}" ${c === cur ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+            <option value="__other">其他（自己打）</option></select>
+        <input id="m-color" placeholder="輸入顏色" class="${inputCls} hidden mt-1">`;
+}
 function submitMaterial(id) {
-    const base = $('m-base').value.trim(), color = $('m-color').value.trim(), flow = $('m-flow').value;
+    const sel = $('m-color-sel');
+    const color = (sel && sel.value !== '__other' ? sel.value : $('m-color').value).trim();
+    const base = $('m-base').value.trim(), flow = $('m-flow').value;
     if (!base || !color) { toast('請填基材與顏色'); return; }
     const dup = inv.materials.find(x => x.id !== id && x.base === base && x.color === color && x.flow === flow);
     if (dup) { toast('已經有同樣的品項了'); return; }
