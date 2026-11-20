@@ -122,7 +122,7 @@
             <h2 class="font-bold text-slate-800 mb-1">顏色名單</h2>
             <p class="text-xs text-slate-500 mb-2">每個產品在 MES「產品」裡勾選自己有哪些顏色。這裡的順序就是畫面上顏色的排列順序。</p>
             <div class="flex gap-2 mb-2">
-                <input id="new-color" placeholder="顏色名稱" class="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none">
+                <input id="new-color" placeholder="顏色名稱（可一次貼多個，用空格或、分開）" class="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none">
                 <button onclick="addColor()" class="bg-slate-900 text-white px-4 rounded-xl text-sm"><i class="fa-solid fa-plus mr-1"></i>新增</button>
             </div>
             <div id="color-list" class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100"></div>
@@ -1135,9 +1135,13 @@ function delCustomer(id) {
     if (confirm(`從名單刪除「${c.name}」？（已經建的備貨單不受影響）`)) api.deleteCustomer(id);
 }
 function addColor() {
-    const v = $('new-color').value.trim(); if (!v) return;
-    if (prep.colors.includes(v)) return toast('已經有這個顏色');
-    api.saveColors([...prep.colors, v]); $('new-color').value = '';
+    // 可一次貼多個：用空格、換行、「、」或逗號分開
+    const names = [...new Set($('new-color').value.split(/[\s、，,]+/).map(x => x.trim()).filter(Boolean))];
+    if (!names.length) return;
+    const add = names.filter(c => !prep.colors.includes(c));
+    if (!add.length) return toast('已經有這個顏色');
+    api.saveColors([...prep.colors, ...add]); $('new-color').value = '';
+    if (add.length > 1 || add.length < names.length) toast(`新增 ${add.length} 個顏色${add.length < names.length ? `（${names.length - add.length} 個已經有了）` : ''}`);
 }
 function delColor(i) {
     const c = prep.colors[i];
