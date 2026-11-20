@@ -328,9 +328,9 @@ const firebaseConfig = {
 // 全部放同一個 collection，Firestore 規則只要加一條
 const COL = 'truckLogs';
 
-window.tk = { days: [], fuels: [], services: [], meta: {}, loaded: false };
+window.tk = { days: [], fuels: [], services: [], meta: {}, loaded: false, customers: [] };
 window.currentUser = null;
-let fa, fs, auth, db, unsub = null, memberUnsub = null;
+let fa, fs, auth, db, unsub = null, memberUnsub = null, custUnsub = null;
 const $ = (id) => document.getElementById(id);
 const emailKey = (e) => String(e || '').trim().toLowerCase();
 
@@ -364,6 +364,11 @@ function startListener() {
         window.renderAll && window.renderAll();
         if (first && window.onFirstLoad) window.onFirstLoad();
     }, err => { console.warn(err); window.toast(errMsg(err)); });
+    // 客戶名單（prepCustomers，備貨頁維護）：出車表單打字時給建議。讀不到就靜默略過
+    if (custUnsub) custUnsub();
+    custUnsub = fs.onSnapshot(fs.collection(db, 'prepCustomers'), snap => {
+        tk.customers = snap.docs.map(d => d.data().name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }, err => { console.warn('客戶名單讀取失敗（請確認 Firestore 規則）', err.code); });
 }
 
 const stamp = () => ({ updatedAt: new Date().toISOString(), updatedBy: window.currentUser?.email || '' });
@@ -387,6 +392,7 @@ window.api = {
 function handleUser(user) {
     if (memberUnsub) { memberUnsub(); memberUnsub = null; }
     if (unsub) { unsub(); unsub = null; }
+    if (custUnsub) { custUnsub(); custUnsub = null; }
     window.currentUser = null; tk.loaded = false;
     if (!user) { document.body.dataset.role = ''; showScreen('login'); return; }
     if (!user.emailVerified) { showScreen('blocked', `${user.email} 尚未完成 Email 驗證，請到 MES 完成驗證。`); return; }
@@ -659,7 +665,8 @@ function openDayForm(date) {
         <div class="space-y-3">
             <div>${lbl('日期')}<input type="date" id="f-date" value="${dt}" ${d ? 'disabled' : ''} class="${inputCls}"></div>
             <div>${lbl('出發前里程')}<input type="number" inputmode="numeric" id="f-odo" value="${d?.odo || ''}" class="${inputCls}"><div class="text-[11px] text-slate-400 mt-0.5">${odoHint(dt)}</div></div>
-            <div>${lbl('客戶（空白隔開）')}<input id="f-clients" value="${esc((d?.clients || []).join(' '))}" oninput="syncChips()" class="${inputCls}">
+            <div>${lbl('客戶（空白隔開）')}<input id="f-clients" value="${esc((d?.clients || []).join(' '))}" oninput="syncChips();suggestClients()" class="${inputCls}">
+                <div id="client-sugg" class="flex flex-wrap gap-1.5 mt-1"></div>
                 <div id="chips" class="flex flex-wrap gap-1.5 mt-2">${freq.map(c => `<button type="button" onclick="toggleChip(this)" data-c="${esc(c)}" class="chip text-xs border border-slate-300 rounded-full px-2.5 py-1">${esc(c)}</button>`).join('')}</div></div>
             <div>${lbl('備註（載模具、聯絡人…）')}<input id="f-notes" value="${esc((d?.notes || []).join(' '))}" class="${inputCls}"></div>
             <button onclick="submitDay(${d ? 'true' : 'false'})" class="w-full bg-blue-600 text-white font-medium py-2.5 rounded-xl">儲存</button>
@@ -669,6 +676,23 @@ function openDayForm(date) {
 function syncChips() {
     const set = new Set(TRUCK.splitInput($('f-clients').value));
     document.querySelectorAll('#chips .chip').forEach(b => b.classList.toggle('on', set.has(b.dataset.c)));
+}
+// 客戶打字建議：備貨頁客戶名單在前，再補以前出車寫過的名字；點一下取代正在打的那個字
+function suggestClients() {
+    const v = $('f-clients').value, box = $('client-sugg');
+    const kw = /\s$/.test(v) ? '' : (v.split(/\s+/).pop() || '').trim();
+    if (!kw) { box.innerHTML = ''; return; }
+    const chosen = new Set(TRUCK.splitInput(v));
+    const past = tk.days.flatMap(d => d.clients || []);
+    const all = [...new Set([...tk.customers, ...past])];
+    const hits = all.filter(c => c !== kw && c.includes(kw) && !chosen.has(c)).slice(0, 8);
+    box.innerHTML = hits.map(c => `<button type="button" onclick="pickClient(this)" data-c="${esc(c)}" class="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-1">${esc(c)}</button>`).join('');
+}
+function pickClient(b) {
+    const el = $('f-clients'), parts = el.value.split(/\s+/);
+    parts[parts.length - 1] = b.dataset.c;
+    el.value = parts.filter(Boolean).join(' ') + ' ';
+    syncChips(); suggestClients(); el.focus();
 }
 function toggleChip(b) {
     const list = TRUCK.splitInput($('f-clients').value); const c = b.dataset.c;
