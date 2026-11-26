@@ -27,7 +27,7 @@
 | 區塊 | 錨點（grep 這個字串） | 內容 |
 |---|---|---|
 | 畫面 HTML | `<!-- ====================` | 各分頁、Modal |
-| 純計算 | `<script id="prep-core">`／`inv-core`／`truck-core` | 無 DOM、無雲端的計算（`index.html` 目前沒有這一塊） |
+| 純計算 | `<script id="prep-core">`／`inv-core`／`truck-core`／`cost-core` | 無 DOM、無雲端的計算（`index.html` 目前沒有這一塊） |
 | 雲端層 | `<script type="module">` | 登入、Firestore、`window.api` |
 | 畫面邏輯 | 雲端層 `</script>` 後的下一個 `<script>` | render、事件處理 |
 
@@ -43,6 +43,7 @@
 | `prep.html` | 備貨：訂單、客戶、顏色 | `window.prep` | `prepOrders`、`prepCustomers`、`prepMeta/colors` |
 | `inventory.html` | 原料庫存 | `window.inv` | `invMaterials`、`invSuppliers`、`invMoves` |
 | `delivery.html` | 出車紀錄 | `window.tk` | `truckLogs` |
+| `cost.html` | 工序計時（加工工序測秒數，算人工成本用） | `window.cost` | `costTimings`（產品讀 `products`，只讀） |
 
 樣式用 Tailwind CDN＋Font Awesome；Firebase v9 模組版（`FB_VER = '9.22.1'`）從 gstatic 動態 `import()`。
 
@@ -64,12 +65,12 @@
 
 | # | 項目 | 牽涉檔案 | 規則 |
 |---|---|---|---|
-| A | 四頁各自有一份相同的起手式：`firebaseConfig`、`FB_VER`、`ROLE_LABEL`、`emailKey`、`showScreen`、`errMsg`、`bg`、`stamp`、`handleUser`、`esc`、`todayLocal`、`canEdit` | 四頁 | 改其中一個就 `grep` 四頁一起改。注意既有差異不要「統一」掉：`index.html` 的提示是 `showToast`、其他頁是 `toast`；`delivery.html` 的 `bg` 會回傳 promise 並重丟錯誤；只有 `index.html` 有註冊／驗證／待開通畫面 |
-| B | `products` 集合 | `index.html`（全部欄位）、`prep.html`（讀；寫 `shipCode`、`colors`；建佔位產品） | 改產品欄位名稱或意義時兩頁都要查。`prep.html` 建的產品**沒有 `sops` 文件**，所以 `index.html` 讀 SOP 一律寫 `appData.sops[id] \|\| {}` |
+| A | 五頁各自有一份相同的起手式：`firebaseConfig`、`FB_VER`、`ROLE_LABEL`、`emailKey`、`showScreen`、`errMsg`、`bg`、`stamp`、`handleUser`、`esc`、`todayLocal`、`canEdit` | 五頁 | 改其中一個就 `grep` 五頁一起改。注意既有差異不要「統一」掉：`index.html` 的提示是 `showToast`、其他頁是 `toast`；`delivery.html` 的 `bg` 會回傳 promise 並重丟錯誤；只有 `index.html` 有註冊／驗證／待開通畫面 |
+| B | `products` 集合 | `index.html`（全部欄位）、`prep.html`（讀；寫 `shipCode`、`colors`；建佔位產品）、`cost.html`（只讀 `code`、`name`） | 改產品欄位名稱或意義時三頁都要查。`costTimings` 另存 `productCode`、`productName` 快照（同 I）。`prep.html` 建的產品**沒有 `sops` 文件**，所以 `index.html` 讀 SOP 一律寫 `appData.sops[id] \|\| {}` |
 | C | 佔位產品：`cycleTime === 999` | `prep.html` 的 `PLACEHOLDER_MOLD`、`index.html` 的 `isUnfilled()` | 判斷一律用 `isUnfilled(p)`，不要直接寫 `=== 999`。999 不可拿去計算 |
 | D | `prepMeta/colors` 顏色名單 | `prep.html` 寫、`index.html` 讀成 `appData.shipColors`、`inventory.html` 讀成 `inv.colors`（原料顏色下拉） | 改結構三頁一起改 |
 | E | `prepOrders` 的 `lines.{lineId}.productId`／`.name` | `prep.html`；`index.html` 的 `mergeProducts` 會改寫它 | 改訂單品項結構時，`mergeProducts` 一定要跟著改 |
-| F | `members/{email小寫}.role`（`admin`／`editor`／`operator`） | 四頁 | 用 `body[data-role]`＋`.need-admin`／`.need-editor` 隱藏，JS 用 `canEdit()`／`isAdmin()`。真正的權限在 Firestore 規則（不在此 repo），**新增集合要提醒使用者去加規則** |
+| F | `members/{email小寫}.role`（`admin`／`editor`／`operator`） | 五頁 | 用 `body[data-role]`＋`.need-admin`／`.need-editor` 隱藏，JS 用 `canEdit()`／`isAdmin()`。真正的權限在 Firestore 規則（不在此 repo），**新增集合要提醒使用者去加規則** |
 | G | `index.html` 雲端層直接碰這些 DOM id：`printable-sop-card`、`user-chip`、`sync-status-indicator`、`migration-banner`、`migration-summary`、`offline-banner`、`log-date`、`auth-*` | `index.html` | 這些 id 不可改名、不可刪 |
 | H | `DEFAULT_SOP` 定義在畫面邏輯，雲端層的 `saveProductsBatch` 也會用 | `index.html` | 不可搬進函式內或改名 |
 | I | `logs` 內的 `productCode`、`productName`、`cycleTime`、`cavities` 是當時的快照 | `index.html` | **故意重複存**，用來保住歷史達成率，不要「正規化」掉 |
